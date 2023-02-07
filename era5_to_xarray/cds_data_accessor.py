@@ -15,13 +15,20 @@ from typing import (
     Union,
     Optional,
 )
-
+"""
+THIS IS THE MOVE: https://cds.climate.copernicus.eu/toolbox/doc/api.html
+NOTE: Data is accessed for the whole globe, then cropped on their end.
+    Therefore timesteps x variables are the main rate limiting step.
+Live CDS API: https://cds.climate.copernicus.eu/live/limits
+"""
 # TODO: Handle query size
 # TODO: Use dask to parallelize API calls? use dask compute
 
 
 class CDSDataAccessor(CDSQueryFormatter):
 
+    # CDS enforces a concurrency limit
+    thread_limit = 10
     valid_hour_steps = [1, 3, 6, 9, 12]
     file_format_dict = {
         'netcdf': '.nc',
@@ -70,8 +77,6 @@ class CDSDataAccessor(CDSQueryFormatter):
                 'param:cdsapi_client'
             )
 
-        print('CDSDataAccessor object successfully initialized!')
-
     def get_hours_list(self) -> List[str]:
         if self.hours_step is not None:
             if self.hours_step not in self.valid_hour_steps:
@@ -83,7 +88,8 @@ class CDSDataAccessor(CDSQueryFormatter):
 
         elif self.specific_hours is not None:
             specific_hours = [
-                i for i in self.specific_hours if (i < 24) and (i >= 0)]
+                i for i in self.specific_hours if (i < 24) and (i >= 0)
+            ]
 
         else:
             raise ValueError(
@@ -101,6 +107,20 @@ class CDSDataAccessor(CDSQueryFormatter):
             'year': self.get_years_list(self.start_dt, self.stop_dt),
         }
 
+    def get_data(
+        self,
+        dataset_name: str,
+        variables: List[str],
+        start_dt: datetime,
+        end_dt: datetime,
+        bbox: Dict[str, float],
+        multithread: bool = True,
+    ) -> xr.Dataset:
+        # TODO: make compatible with monthly requests
+        # TODO: set up multithreading using futures
+        # TODO: iterate by timestep since it pulls the globe everytime
+        raise NotImplementedError
+
     def get_era5_hourly_point_data(
         self,
         variables_dict: Dict[str, str],
@@ -110,15 +130,6 @@ class CDSDataAccessor(CDSQueryFormatter):
 
         # make a list to store the output datasets
         out_datasets = {}
-
-        # get coords_dict
-        if coords_dict is None:
-            coords_dict = self.coords_dict
-        else:
-            warnings.warn(
-                message='Overriding param:coords_dict with function call input!',
-                category=UserWarning,
-            )
 
         # prep request dictionary
         time_dict = self.make_hourly_time_dict()
@@ -170,52 +181,6 @@ class CDSDataAccessor(CDSQueryFormatter):
                     )
 
         return out_datasets
-
-
-def convert_output_to_table(
-    variables_dict: Dict[str, str],
-    coords_dict: Dict[str, Tuple[float, float]],
-    output_dict: Dict[str, Dict[str, xr.Dataset]],
-) -> pd.DataFrame:
-    """Converts the output of a CDSDataAccessor function to a pandas dataframe"""
-    df_dicts = []
-
-    for station_id, coords in coords_dict.items():
-        df_dict = {
-            'station_id': None,
-            'datetime': None,
-        }
-
-        print(output_dict[station_id].keys())
-        for variable, unit in variables_dict.items():
-            print(f'Adding {variable}')
-            data_array = output_dict[station_id][variable].to_array()
-            data_array = data_array.sel(
-                {'longitude': coords[0], 'latitude': coords[1]},
-                method='nearest',
-            )
-
-            # init datetime and station id column if empty
-            if df_dict['datetime'] is None:
-                df_dict['datetime'] = data_array.time.values
-            if df_dict['station_id'] is None:
-                df_dict['station_id'] = [
-                    station_id for i in range(len(data_array.time.values))]
-
-            # add variable data
-            df_dict[f'{variable}_{unit}'] = data_array.variable.values.squeeze()
-
-        df_dicts.append(pd.DataFrame.from_dict(df_dict))
-
-    out_df = pd.concat(df_dicts)
-
-    # set the index
-    if len(out_df.station_id.unique()) == 1:
-        out_df.set_index('datetime', inplace=True)
-    else:
-        out_df.set_index(['station_id', 'datetime'], inplace=True)
-
-    return out_df
 
 
 def unlock_and_clean(output_dict: Dict[str, Dict[str, xr.Dataset]]) -> None:

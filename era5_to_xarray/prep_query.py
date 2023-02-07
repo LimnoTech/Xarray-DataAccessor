@@ -27,6 +27,26 @@ PossibleAOIInputs = Union[
 ]
 
 
+def get_datetime(input_date: Union[str, datetime, int]) -> datetime:
+    if isinstance(input_date, datetime):
+        return input_date
+
+    # assume int is a year
+    elif isinstance(input_date, int):
+        if input_date not in list(range(1950, datetime.now().year + 1)):
+            raise ValueError(
+                f'integer start/end date input={input_date} is not a valid year.'
+            )
+        return pd.to_datetime(f'{input_date}-01-01')
+
+    elif isinstance(input_date, str):
+        return pd.to_datetime(input_date)
+    else:
+        raise ValueError(
+            f'start/end date input={input_date} is invalid.'
+        )
+
+
 class CDSQueryFormatter:
 
     @staticmethod

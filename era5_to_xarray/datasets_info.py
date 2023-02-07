@@ -39,7 +39,7 @@ ERA5-land variables
 from typing import List
 
 # data sources and dataset names
-DATA_SOURCES = ('CDS', 'AWS')
+DATASET_SOURCES = ('CDS', 'AWS')
 
 DATASET_NAMES = [
     'reanalysis-era5-single-levels',
@@ -484,23 +484,32 @@ MISSING_HOURLY_VARIABLES = [
 ]
 
 
-def list_variables(
+def verify_dataset(
     dataset_name: str,
-    data_source: str = 'CDS',
-) -> List[str]:
-    """Returns a list of possible variables given a dataset_name / endpoint and data source"""
-    if data_source not in DATA_SOURCES:
+    dataset_source: str,
+) -> None:
+    if dataset_source not in DATASET_SOURCES:
         raise ValueError(
-            f'param:data_source must be in {DATA_SOURCES}!'
+            f'param:dataset_source must be in {DATASET_SOURCES}!'
         )
     if dataset_name not in DATASET_NAMES:
         raise ValueError(
             f'param:dataset_name must be in {DATASET_NAMES}!'
         )
-    if data_source == 'AWS':
+
+
+def list_variables(
+    dataset_name: str,
+    dataset_source: str = 'CDS',
+) -> List[str]:
+    """Returns a list of possible variables given a dataset_name / endpoint and data source"""
+    # verify dataset name and source
+    verify_dataset(dataset_name, dataset_source)
+
+    if dataset_source == 'AWS':
         if dataset_name != 'reanalysis-era5-single-levels':
             raise ValueError(
-                f'param:data_source={data_source} only contains '
+                f'param:dataset_source={dataset_source} only contains '
                 f'dataset_name=reanalysis-era5-single-levels'
             )
         return list(AWS_VARIABLES_DICT.keys())
