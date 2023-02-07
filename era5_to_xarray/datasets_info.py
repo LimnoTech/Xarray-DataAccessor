@@ -13,7 +13,7 @@ AWS single levels (hourly) data variables have different names and are stored
     under AWS_VARIABLES_DICT. The standard CDS names are the dictionary keys,
     and the s3 bucket names are the values.
     s3 bucket docs: https://github.com/planet-os/notebooks/blob/master/aws/era5-pds.md
-    dataset = 'era5-pds'
+    dataset = 'reanalysis-era5-single-levels'.
 
 DATASETS 
 --------------------------------
@@ -37,8 +37,22 @@ ERA5-land variables
 * reanalysis-era5-land-monthly-means
 """
 from typing import List
+
+# data sources and dataset names
 DATA_SOURCES = ('CDS', 'AWS')
 
+DATASET_NAMES = [
+    'reanalysis-era5-single-levels',
+    'reanalysis-era5-single-levels-preliminary-back-extension',
+    'reanalysis-era5-single-levels-monthly-means',
+    'reanalysis-era5-single-levels-monthly-means-preliminary-back-extension',
+    'reanalysis-era5-pressure-levels',
+    'reanalysis-era5-pressure-levels-monthly-means',
+    'reanalysis-era5-pressure-levels-preliminary-back-extension',
+    'reanalysis-era5-pressure-levels-monthly-means-preliminary-back-extension',
+    'reanalysis-era5-land',
+    'reanalysis-era5-land-monthly-means',
+]
 
 # single level variables on AWS S3 bucket
 AWS_VARIABLES_DICT = {
@@ -467,20 +481,6 @@ MISSING_HOURLY_VARIABLES = [
     '10m_wind_speed',
     'magnitude_of_turbulent_surface_stress',
     'mean_magnitude_of_turbulent_surface_stress',
-]
-
-
-DATASET_NAMES = [
-    'reanalysis-era5-single-levels',
-    'reanalysis-era5-single-levels-preliminary-back-extension',
-    'reanalysis-era5-single-levels-monthly-means',
-    'reanalysis-era5-single-levels-monthly-means-preliminary-back-extension',
-    'reanalysis-era5-pressure-levels',
-    'reanalysis-era5-pressure-levels-monthly-means',
-    'reanalysis-era5-pressure-levels-preliminary-back-extension',
-    'reanalysis-era5-pressure-levels-monthly-means-preliminary-back-extension',
-    'reanalysis-era5-land',
-    'reanalysis-era5-land-monthly-means',
 ]
 
 
