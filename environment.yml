@@ -1,0 +1,40 @@
+name: era5_to_xarray
+channels:
+  - conda-forge
+  - nodefaults
+
+dependencies:
+  - python =3.9
+
+  # For data processing 
+  - pandas
+  - xarray
+  - rioxarray
+  - dask
+  - geopandas
+
+  # For API access and data formats
+  - cdsapi
+  - fsspec
+  - s3fs
+  - h5netcdf
+  - cfgrib
+  - pyarrow
+
+  # Interactivity & Visualization (optional, but required for viz)
+  - jupyterlab
+  - ipympl
+  - nodejs
+  - hvplot
+  - cartopy
+
+# Dev tools: Language Server Protocol (LSP) (Optional), for:
+  - python-lsp-server # LSP extension for Python (pylsp), including:
+  - pylsp-mypy  # MyPy type checking for Python >=3.7.
+  - jupyterlab-lsp # Provides both server extension and lab extension
+
+  # Package management
+  - conda
+  - mamba
+  - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
+  - pip
