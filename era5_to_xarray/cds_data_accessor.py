@@ -2,6 +2,7 @@ import xarray as xr
 import cdsapi
 import geopandas as gpd
 import warnings
+import multiprocessing
 import pandas as pd
 import tempfile
 from pathlib import Path
@@ -29,34 +30,51 @@ class CDSDataAccessor(CDSQueryFormatter):
 
     # CDS enforces a concurrency limit
     thread_limit = 10
-    valid_hour_steps = [1, 3, 6, 9, 12]
     file_format_dict = {
         'netcdf': '.nc',
+        'grib': '.grib',
     }
+
+    # TODO: make a typed dict for this in CDSQueryFormatter
+    InputDict = Dict[str, int]
 
     def __init__(
         self,
-        start_dt: datetime,
-        stop_dt: datetime,
-        bounding_box: Dict[str, float],
-        variables: List[str],
-        hours_step: Optional[int] = None,
-        specific_hours: Optional[List[int]] = None,
+        file_format: str = 'netcdf',
+        multithread: bool = True,
+        use_dask: bool = True,
+        dask_client_kwargs: Optional[dict] = None,
     ) -> None:
 
-        self.start_dt = start_dt
-        self.stop_dt = stop_dt
-        self.hours_step = hours_step
-        self.specific_hours = specific_hours
+        # init multithreading
+        self.multithread = multithread
+        self.cores = int(multiprocessing.cpu_count())
+        self.use_dask = use_dask
 
-        # add GRIB format support if plugin exists
-        try:
-            import cfgrib
-            CDSDataAccessor.file_format_dict['grib'] = '.grib'
-        except ImportError:
+        if self.use_dask:
+            from dask.distributed import Client
+            dask_client = Client(kwargs=dask_client_kwargs)
+
+        # init file format
+        if not file_format in list(CDSDataAccessor.file_format_dict.keys()):
             warnings.warn(
-                'No GRIB support -> NetCDF only. Install cfgrib if needed.'
+                f'param:file_format={file_format} must be in '
+                f'{CDSDataAccessor.file_format_dict.keys()}. Defaulting to '
+                f'file_format=netcdf'
             )
+            file_format = 'netcdf'
+
+        elif file_format == 'grib':
+            try:
+                import cfgrib
+            except ImportError:
+                warnings.warn(
+                    'No GRIB support -> NetCDF only. Install cfgrib if needed. '
+                    'Defaulting to file_format=netcdf'
+                )
+                file_format = 'netcdf'
+
+        self.file_format = file_format
 
         # set up CDS client
         try:
@@ -77,35 +95,28 @@ class CDSDataAccessor(CDSQueryFormatter):
                 'param:cdsapi_client'
             )
 
-    def get_hours_list(self) -> List[str]:
-        if self.hours_step is not None:
-            if self.hours_step not in self.valid_hour_steps:
-                raise ValueError(
-                    f'param:hours_time_step must be one of the following: '
-                    f'{self.valid_hour_steps}'
-                )
-            specific_hours = list(range(0, 24, self.hours_step))
-
-        elif self.specific_hours is not None:
-            specific_hours = [
-                i for i in self.specific_hours if (i < 24) and (i >= 0)
-            ]
-
-        else:
-            raise ValueError(
-                'CDSDataAccessor must be initiated with either hours_step, '
-                'or specific_hours defined!'
-            )
-
-        return ['{0:0=2d}:00'.format(h) for h in specific_hours]
-
-    def make_hourly_time_dict(self) -> Dict[str, Union[str, List[str], List[float]]]:
-        return {
-            'time': self.get_hours_list(),
-            'day': self.get_days_list(self.start_dt, self.stop_dt),
-            'month': self.get_months_list(self.start_dt, self.stop_dt),
-            'year': self.get_years_list(self.start_dt, self.stop_dt),
+    def make_time_dict(
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
+        hours_step: Optional[int] = None,
+        specific_hours: Optional[List[int]] = None,
+    ) -> Dict[str, Union[str, List[str], List[float]]]:
+        time_dict = {
+            'day': self.get_days_list(start_dt, end_dt),
+            'month': self.get_months_list(start_dt, end_dt),
+            'year': self.get_years_list(start_dt, end_dt),
         }
+        if hours_step is not None or specific_hours is not None:
+            time_dict['time'] = self.get_hours_list(hours_step, specific_hours)
+        return time_dict
+
+    def _get_api_response(
+        self,
+        input_dict: InputDict,
+    ) -> xr.Dataset:
+        """Separated out as a function to support multithreading"""
+        raise NotImplementedError
 
     def get_data(
         self,
@@ -114,11 +125,19 @@ class CDSDataAccessor(CDSQueryFormatter):
         start_dt: datetime,
         end_dt: datetime,
         bbox: Dict[str, float],
-        multithread: bool = True,
+        hours_step: Optional[int] = None,
+        specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
         # TODO: make compatible with monthly requests
+        # TODO:
+        time_dict = self.make_time_dict(
+            start_dt,
+            end_dt,
+            hours_step=hours_step,
+            specific_hours=specific_hours,
+        )
         # TODO: set up multithreading using futures
-        # TODO: iterate by timestep since it pulls the globe everytime
+        # TODO: iterate by time step since it pulls the globe every time
         raise NotImplementedError
 
     def get_era5_hourly_point_data(

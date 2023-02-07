@@ -1,7 +1,7 @@
 import warnings
 import pandas as pd
 import xarray as xr
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Optional
 from pathlib import Path
 from datetime import datetime
 
@@ -48,6 +48,7 @@ def get_datetime(input_date: Union[str, datetime, int]) -> datetime:
 
 
 class CDSQueryFormatter:
+    valid_hour_steps = [1, 3, 6, 9, 12]
 
     @staticmethod
     def get_years_list(
@@ -77,6 +78,35 @@ class CDSQueryFormatter:
         else:
             days = [d for d in range(start_dt.day, stop_dt.day + 1)]
             return ['{0:0=2d}'.format(d) for d in days if d <= 31]
+
+    @classmethod
+    def get_hours_list(
+        cls,
+        hours_step: int = 1,
+        specific_hours: Optional[List[int]] = None,
+    ) -> List[str]:
+        if hours_step != 1:
+            if hours_step not in CDSQueryFormatter.valid_hour_steps:
+                raise ValueError(
+                    f'param:hours_time_step must be one of the following: '
+                    f'{CDSQueryFormatter.valid_hour_steps}'
+                )
+            specific_hours = list(range(0, 24, hours_step))
+
+        elif specific_hours is not None:
+            i_len = len(specific_hours)
+            specific_hours = [
+                i for i in specific_hours if (i < 24) and (i >= 0)
+            ]
+            delta = i_len - len(specific_hours)
+            if delta > 0:
+                warnings.warn(
+                    f'Not all param:specific hours were < 24, and >=0. '
+                    f'{delta} have been ignored'
+                )
+            del i_len, delta
+
+        return ['{0:0=2d}:00'.format(h) for h in specific_hours]
 
 
 def _get_coords_dict() -> Dict[Union[str, int], Tuple[float, float]]:

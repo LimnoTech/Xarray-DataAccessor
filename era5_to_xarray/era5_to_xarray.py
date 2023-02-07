@@ -176,16 +176,18 @@ class GetERA5Data:
                 )
 
         # get accessor and pull data
-        data_accessor = self.dataset_accessors[self.dataset_source]
-        dataset = data_accessor.get_dataset(
+        data_accessor = self.dataset_accessors[self.dataset_source](
+            multithread=self.multithread,
+            use_dask=DASK_DISTRIBUTE,
+        )
+
+        dataset = data_accessor.get_data(
             self.dataset_name,
             self.variables,
             self.start_dt,
             self.end_dt,
             self.bbox,
-            multithread=self.multithread,
         )
-
         # set object attribute to point to the dataset
         self.xarray_dataset = dataset
         return self.xarray_dataset
