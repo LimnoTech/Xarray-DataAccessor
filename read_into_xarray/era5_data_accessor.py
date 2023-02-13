@@ -9,9 +9,8 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from urllib.request import urlopen
-from era5_datasets_info import (
+from read_into_xarray.era5_datasets_info import (
     verify_dataset,
-    list_variables,
     DATASET_NAMES,
     AWS_VARIABLES_DICT,
     SINGLE_LEVEL_VARIABLES,

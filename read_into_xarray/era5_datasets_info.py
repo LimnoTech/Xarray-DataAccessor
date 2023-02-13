@@ -36,11 +36,6 @@ ERA5-land variables
 * reanalysis-era5-land
 * reanalysis-era5-land-monthly-means
 """
-import era5_data_accessor
-
-# get data accessor
-DATA_ACCESSOR = era5_data_accessor.ERA5DataAccessor
-
 # data sources and dataset names
 DATASET_SOURCES = ('CDS', 'AWS')
 

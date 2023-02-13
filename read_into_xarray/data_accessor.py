@@ -8,11 +8,11 @@ from typing import (
     Union,
     List,
     Dict,
+    TypedDict,
 )
 from types import ModuleType
 import xarray as xr
 import pandas as pd
-from era5_data_accessor import ERA5DataAccessor
 
 # control weather to use dask for xarray computation
 try:
@@ -34,14 +34,21 @@ except ImportError:
 CoordsTuple = Tuple[float, float]
 
 
+class BoundingBoxDict(TypedDict):
+    north: float
+    south: float
+    east: float
+    west: float
+
+
 class DataAccessor:
     """Main class to get a data."""
 
     PossibleAOIInputs = Union[
         str,
         Path,
-        Tuple[float, float],
-        List[Tuple[float, float]],
+        CoordsTuple,
+        List[CoordsTuple],
         xr.DataArray,
     ]
 
@@ -68,7 +75,7 @@ class DataAccessor:
         for k, v in self.supported_datasets.items():
             if dataset_name in v:
                 self.dataset_key = k
-                self.dataset_name = v
+                self.dataset_name = dataset_name
         if self.dataset_name is None:
             return ValueError(
                 f'Cant find support for param:dataset_name={dataset_name}'
@@ -104,15 +111,16 @@ class DataAccessor:
             raise ValueError(
                 f'Can only use one AOI selector! Multiple applied {inputs.items()}'
             )
+        else:
+            valid_inputs = valid_inputs[0]
 
-        self.aoi_input = valid_inputs[0][1]
-        self.aoi_input_type, self.aoi_input = valid_inputs[0][0]
+        self.aoi_input_type, self.aoi_input = valid_inputs
         print(f'Using {self.aoi_input_type} to select AOI')
 
         # get the bounding box coordinates
         self.bbox = self.get_bounding_box(
-            aoi_input=self.aoi_input,
             aoi_input_type=self.aoi_input_type,
+            aoi_input=self.aoi_input,
         )
 
         # set up empty attribute to store the dataset later
@@ -129,23 +137,22 @@ class DataAccessor:
         Finds all supported datasets by their info module.
         NOTE: This can be converted into a Factory implementation later.
         """
-        if self.supported_datasets_info is None:
-            self.supported_datasets_info = {}
+        if self._supported_datasets_info is None:
+            self._supported_datasets_info = {}
 
             # go thru each dataset and try to add their info module
             # TODO: this could be a factory implementation!
             try:
-                import era5_datasets_info
-                self.supported_datasets_info['ERA5'] = era5_datasets_info
+                import read_into_xarray.era5_datasets_info as era5_datasets_info
+                self._supported_datasets_info['ERA5'] = era5_datasets_info
             except ImportError:
                 pass
-
         # check if things look correct
-        if len(self.supported_datasets_info) == 0:
+        if len(self._supported_datasets_info) == 0:
             raise ValueError(
                 f'No datasets supported! Did you move/delete modules?'
             )
-        return self.supported_datasets_info
+        return self._supported_datasets_info
 
     @property
     def supported_datasets(self) -> Dict[str, List[str]]:
@@ -168,6 +175,24 @@ class DataAccessor:
             )
         return self._supported_datasets
 
+    @staticmethod
+    def _get_era5_accessor() -> object:
+        try:
+            import read_into_xarray.era5_data_accessor as era5_data_accessor
+            return era5_data_accessor.ERA5DataAccessor
+        except ImportError:
+            raise ImportError(
+                'era5_datasets_info.py was found but not era5_data_accessor.py! '
+                'Did you move or delete files?'
+            )
+
+    @property
+    def _accessors(self) -> Dict[str, callable]:
+        """Maps dataset names to an import of their accessors"""
+        return {
+            'ERA5': self._get_era5_accessor,
+        }
+
     @property
     def supported_accessors(self) -> Dict[str, object]:
         """
@@ -176,8 +201,8 @@ class DataAccessor:
         if self._supported_accessors is None:
             self._supported_accessors = {}
 
-            for key, module in self.supported_datasets_info.items():
-                self._supported_accessors[key] = module.DATA_ACCESSOR
+            for key in self.supported_datasets_info.keys():
+                self._supported_accessors[key] = self._accessors[key]()
 
         # check if things look correct
         if len(self._supported_accessors) != len(self.supported_datasets_info):
@@ -210,32 +235,52 @@ class DataAccessor:
             )
 
     @staticmethod
-    def _bbox_from_coords():
+    def _bbox_from_coords(
+        coords: Union[CoordsTuple, List[CoordsTuple]],
+    ) -> BoundingBoxDict:
         # TODO: add buffer so the edge isn't the exact coordinate
         raise NotImplementedError
 
     @staticmethod
-    def _bbox_from_shp():
+    def _bbox_from_coords_csv(
+        csv: Union[str, Path, pd.DataFrame],
+    ) -> BoundingBoxDict:
+        raise NotImplementedError
+
+    @staticmethod
+    def _bbox_from_shp(
+        shapefile: Union[str, Path],
+    ) -> BoundingBoxDict:
+        # note: gpd.GeoDataFrame not in the type hint because it's not necessarily installed
         if not HAS_GEOPANDAS:
             raise ImportError(
                 f'To create a bounding box from shapefile you need geopandas installed!'
             )
+
         raise NotImplementedError
 
     @staticmethod
-    def _bbox_from_raster():
+    def _bbox_from_raster(
+        raster: Union[str, Path, xr.DataArray],
+    ) -> BoundingBoxDict:
         if not HAS_RIOXARRAY:
             raise ImportError(
                 f'To create a bounding box from raster you need rioxarray installed!'
             )
         raise NotImplementedError
 
-    @staticmethod
     def get_bounding_box(
-        aoi_input: PossibleAOIInputs,
+        self,
         aoi_input_type: str,
-    ):
-        raise NotImplementedError
+        aoi_input: PossibleAOIInputs,
+    ) -> BoundingBoxDict:
+        bbox_function_mapper = {
+            'coordinates': self._bbox_from_coords,
+            'csv_of_coords': self._bbox_from_coords_csv,
+            'shapefile': self._bbox_from_shp,
+            'raster': self._bbox_from_raster,
+        }
+        return bbox_function_mapper[aoi_input_type](aoi_input)
 
     @property
     def inputs_dict(
@@ -293,7 +338,7 @@ class DataAccessor:
     def convert_output_to_table(
         self,
         variables_dict: Dict[str, str],
-        coords_dict: Dict[str, Tuple[float, float]],
+        coords_dict: Dict[str, CoordsTuple],
         output_dict: Dict[str, Dict[str, xr.Dataset]],
     ) -> pd.DataFrame:
         """Converts the output of a ERA5DataAccessor function to a pandas dataframe"""
