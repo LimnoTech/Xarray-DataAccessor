@@ -10,6 +10,7 @@ Based on [`era5cli`](https://github.com/eWaterCycle/era5cli)'s source code.
 **Features to build:**
 * CDS API call object.
 * An object that inherits from that for each relevant dataset.
+* support pressure levels query
 
 # Datasets 
 ## Copernicus Data Store API
