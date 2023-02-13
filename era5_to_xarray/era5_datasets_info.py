@@ -54,7 +54,6 @@ DATASET_NAMES = [
     'reanalysis-era5-land-monthly-means',
 ]
 
-# single level variables on AWS S3 bucket
 AWS_VARIABLES_DICT = {
     '10m_u_component_of_wind': 'eastward_wind_at_10_metres',
     '10m_v_component_of_wind': 'northward_wind_at_10_metres',
@@ -74,7 +73,6 @@ AWS_VARIABLES_DICT = {
     'surface_solar_radiation_downwards': 'integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation',
     'maximum_total_precipitation_rate_since_previous_post_processing': 'precipitation_amount_1hour_Accumulation',
 }
-
 
 # all single level variables in both hourly and monthly data
 SINGLE_LEVEL_VARIABLES = [
@@ -486,16 +484,14 @@ MISSING_HOURLY_VARIABLES = [
 
 def verify_dataset(
     dataset_name: str,
-    dataset_source: str,
 ) -> None:
-    if dataset_source not in DATASET_SOURCES:
-        raise ValueError(
-            f'param:dataset_source must be in {DATASET_SOURCES}!'
-        )
+
     if dataset_name not in DATASET_NAMES:
         raise ValueError(
             f'param:dataset_name must be in {DATASET_NAMES}!'
         )
+
+# dataset_name -> map to a class -> that class will verify the variables
 
 
 def list_variables(
@@ -506,6 +502,8 @@ def list_variables(
     # verify dataset name and source
     verify_dataset(dataset_name, dataset_source)
 
+    # TODO: Abstract this, would get ugly if we added more datasets
+    # NOTE: responsibility should be the class / dataset
     if dataset_source == 'AWS':
         if dataset_name != 'reanalysis-era5-single-levels':
             raise ValueError(
