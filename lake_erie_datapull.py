@@ -1,3 +1,4 @@
+import read_into_xarray
 from read_into_xarray import DataAccessor
 from pathlib import Path
 """
@@ -23,27 +24,28 @@ Thanks a bunch
 """
 START_TIME = '9/1/2015'
 END_TIME = '10/1/2016'
-AOI = Path('lake_erie_data/LEEM_boundary.shp')
+AOI_SHP = Path(Path.cwd() / 'lake_erie_data/LEEM_boundary.shp')
 RESOLUTION = 100 # meters
-air temp
-dew point
-cloud cover
-short wave radiation
-u (eastward) component of wind speed
-v (northward) component of wind speed
-
+DATASET_NAME = 'reanalysis-era5-single-levels'
 VARIABLES = [
-
+    '2m_temperature',
+    '2m_dewpoint_temperature',
+    'total_cloud_cover',
+    'mean_surface_downward_short_wave_radiation_flux',
+    '10m_u_component_of_wind',
+    '10m_v_component_of_wind',
 ]
 
 data_accessor = DataAccessor(
-    dataset_name='reanalysis-era5-single-levels',
-    variables: Union[str, List[str]],
+    dataset_name=DATASET_NAME,
+    variables=VARIABLES,
     start_time=START_TIME,
     end_time=END_TIME,
     coordinates=None,
     csv_of_coords=None,
-    shapefile: Optional[Union[str, Path]] = None,
+    shapefile=AOI_SHP,
     raster=None,
-    multithread: bool = True,
+    multithread=True,
 )
+
+print(dir(data_accessor))
