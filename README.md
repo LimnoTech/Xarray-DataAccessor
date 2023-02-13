@@ -1,5 +1,9 @@
 # ERA5-to-Xarray
-A repo to efficiently read ERA5 data into [Xarray](https://docs.xarray.dev/en/stable/) using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization via the CDS API or s3 AWS bucket.
+
+**NOTE:** Change name to something more generic!
+
+
+A repo to efficiently read data into [Xarray](https://docs.xarray.dev/en/stable/) using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization via the CDS API or s3 AWS bucket.
 
 Based on [`era5cli`](https://github.com/eWaterCycle/era5cli)'s source code.
 
