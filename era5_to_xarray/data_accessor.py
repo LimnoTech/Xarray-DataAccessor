@@ -11,17 +11,7 @@ from typing import (
 )
 import xarray as xr
 import pandas as pd
-from cds_data_accessor import CDSDataAccessor
-from aws_data_accessor import AWSDataAccessor
-from prep_query import (
-    get_datetime,
-    get_bounding_box,
-)
-from datasets_info import (
-    verify_dataset,
-    list_variables,
-    AWS_VARIABLES_DICT,
-)
+from era5_data_accessor import ERA5DataAccessor
 
 # control weather to use dask for xarray computation
 try:
@@ -29,12 +19,30 @@ try:
     DASK_DISTRIBUTE = True
 except ImportError:
     DASK_DISTRIBUTE = False
+try:
+    import geopandas as gpd
+    HAS_GEOPANDAS = True
+except ImportError:
+    HAS_GEOPANDAS = False
+try:
+    import rioxarray
+    HAS_RIOXARRAY = True
+except ImportError:
+    HAS_RIOXARRAY = False
 
 CoordsTuple = Tuple[float, float]
 
 
-class GetERA5Data:
+class DataAccessor:
     """Main class to get a data."""
+
+    PossibleAOIInputs = Union[
+        str,
+        Path,
+        Tuple[float, float],
+        List[Tuple[float, float]],
+        xr.DataArray,
+    ]
 
     def __init__(
         self,
@@ -42,7 +50,6 @@ class GetERA5Data:
         variables: Union[str, List[str]],
         start_time: Union[datetime, str, int],
         end_time: Union[datetime, str, int],
-        dataset_source: Optional[str] = 'CDS',
         coordinates: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
         csv_of_coords: Optional[Union[str, Path]] = None,
         shapefile: Optional[Union[str, Path]] = None,
@@ -51,54 +58,9 @@ class GetERA5Data:
         no_aws: bool = False,
     ) -> None:
 
-        # bring in dataset name and source
-        verify_dataset(dataset_name, dataset_source)
-        self.dataset_name = dataset_name
-        self.dataset_source = dataset_source
-
-        # control multithreading
-        self.multithread = multithread
-        self.cores = int(multiprocessing.cpu_count())
-
-        # bring in variables
-        self.possible_variables = list_variables(
-            dataset_name,
-            dataset_source,
-        )
-        self.variables = []
-        cant_add_variables = []
-        aws_compatible = []
-        for var in variables:
-            if var in self.possible_variables:
-                self.variables.append(var)
-                if var in AWS_VARIABLES_DICT:
-                    aws_compatible.append(var)
-            else:
-                cant_add_variables.append(var)
-
-        # warn users about non compatible variables
-        if len(cant_add_variables) > 0:
-            warnings.warn(
-                f'variables {cant_add_variables} are not valid for param:'
-                f'dataset_name={self.dataset_name}, param:dataset_source='
-                f'{self.dataset_source}.\nPrint GetERA5Data.'
-                f'possible_variables to see all valid variables for '
-                f'the current dataset name/source combo!'
-            )
-            del cant_add_variables
-
-        # switch to AWS if possible
-        if (len(aws_compatible) == len(self.variables)) and not no_aws:
-            warnings.warn(
-                'All variables are compatible w/ AWS S3 data access! '
-                'Switching self.dataset_source to = AWS. Set no_aws=True '
-                'when initializing this object to override this behavior.'
-            )
-            self.dataset_source = 'AWS'
-
         # init start/end time
-        self.start_dt = get_datetime(start_time)
-        self.end_dt = get_datetime(end_time)
+        self.start_dt = self.get_datetime(start_time)
+        self.end_dt = self.get_datetime(end_time)
 
         # get AOI inputs set up
         inputs = {
@@ -124,7 +86,7 @@ class GetERA5Data:
         print(f'Using {self.aoi_input_type} to select AOI')
 
         # get the bounding box coordinates
-        self.bbox = get_bounding_box(
+        self.bbox = self.get_bounding_box(
             aoi_input=self.aoi_input,
             aoi_input_type=self.aoi_input_type,
         )
@@ -133,9 +95,57 @@ class GetERA5Data:
         self.xarray_dataset = None
 
         print(
-            f'CDSDataAccessor object successfully initialized! '
-            f'Use CDSDataAccessor.inputs_dict to verify your inputs.'
+            f'ERA5DataAccessor object successfully initialized! '
+            f'Use ERA5DataAccessor.inputs_dict to verify your inputs.'
         )
+
+    @staticmethod
+    def get_datetime(input_date: Union[str, datetime, int]) -> datetime:
+        if isinstance(input_date, datetime):
+            return input_date
+
+        # assume int is a year
+        elif isinstance(input_date, int):
+            if input_date not in list(range(1950, datetime.now().year + 1)):
+                raise ValueError(
+                    f'integer start/end date input={input_date} is not a valid year.'
+                )
+            return pd.to_datetime(f'{input_date}-01-01')
+
+        elif isinstance(input_date, str):
+            return pd.to_datetime(input_date)
+        else:
+            raise ValueError(
+                f'start/end date input={input_date} is invalid.'
+            )
+
+    @staticmethod
+    def _bbox_from_coords():
+        # TODO: add buffer so the edge isn't the exact coordinate
+        raise NotImplementedError
+
+    @staticmethod
+    def _bbox_from_shp():
+        if not HAS_GEOPANDAS:
+            raise ImportError(
+                f'To create a bounding box from shapefile you need geopandas installed!'
+            )
+        raise NotImplementedError
+
+    @staticmethod
+    def _bbox_from_raster():
+        if not HAS_RIOXARRAY:
+            raise ImportError(
+                f'To create a bounding box from raster you need rioxarray installed!'
+            )
+        raise NotImplementedError
+
+    @staticmethod
+    def get_bounding_box(
+        aoi_input: PossibleAOIInputs,
+        aoi_input_type: str,
+    ):
+        raise NotImplementedError
 
     @property
     def inputs_dict(
@@ -150,13 +160,6 @@ class GetERA5Data:
             'End datetime': self.end_dt,
             'Variables': self.variables,
             'Multithreading': str(self.multithread),
-        }
-
-    @property
-    def dataset_accessors(self) -> Dict[str, object]:
-        return {
-            'AWS': AWSDataAccessor,
-            'CDS': CDSDataAccessor,
         }
 
     def pull_data(
@@ -200,7 +203,7 @@ class GetERA5Data:
         coords_dict: Dict[str, Tuple[float, float]],
         output_dict: Dict[str, Dict[str, xr.Dataset]],
     ) -> pd.DataFrame:
-        """Converts the output of a CDSDataAccessor function to a pandas dataframe"""
+        """Converts the output of a ERA5DataAccessor function to a pandas dataframe"""
         df_dicts = []
 
         for station_id, coords in coords_dict.items():
