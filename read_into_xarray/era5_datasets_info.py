@@ -36,7 +36,10 @@ ERA5-land variables
 * reanalysis-era5-land
 * reanalysis-era5-land-monthly-means
 """
-from typing import List
+import era5_data_accessor
+
+# get data accessor
+DATA_ACCESSOR = era5_data_accessor.ERA5DataAccessor
 
 # data sources and dataset names
 DATASET_SOURCES = ('CDS', 'AWS')
@@ -490,36 +493,3 @@ def verify_dataset(
         raise ValueError(
             f'param:dataset_name must be in {DATASET_NAMES}!'
         )
-
-# dataset_name -> map to a class -> that class will verify the variables
-
-
-def list_variables(
-    dataset_name: str,
-    dataset_source: str = 'CDS',
-) -> List[str]:
-    """Returns a list of possible variables given a dataset_name / endpoint and data source"""
-    # verify dataset name and source
-    verify_dataset(dataset_name, dataset_source)
-
-    # TODO: Abstract this, would get ugly if we added more datasets
-    # NOTE: responsibility should be the class / dataset
-    if dataset_source == 'AWS':
-        if dataset_name != 'reanalysis-era5-single-levels':
-            raise ValueError(
-                f'param:dataset_source={dataset_source} only contains '
-                f'dataset_name=reanalysis-era5-single-levels'
-            )
-        return list(AWS_VARIABLES_DICT.keys())
-
-    if 'single-levels' in dataset_name:
-        if 'monthly' in dataset_name:
-            return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_MONTHLY_VARIABLES]
-        else:
-            return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_HOURLY_VARIABLES]
-    elif 'pressure-levels' in dataset_name:
-        return PRESSURE_LEVEL_VARIABLES
-    elif 'land' in dataset_name:
-        return ERA5_LAND_VARIABLES
-    else:
-        raise ValueError(f'Cannot return variables. Something went wrong.')

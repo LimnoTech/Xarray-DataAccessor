@@ -9,6 +9,7 @@ from typing import (
     List,
     Dict,
 )
+from types import ModuleType
 import xarray as xr
 import pandas as pd
 from era5_data_accessor import ERA5DataAccessor
@@ -55,8 +56,31 @@ class DataAccessor:
         shapefile: Optional[Union[str, Path]] = None,
         raster: Optional[Union[str, Path, xr.DataArray]] = None,
         multithread: bool = True,
-        no_aws: bool = False,
     ) -> None:
+
+        # see if the dataset requested is available
+        self._supported_datasets_info = None
+        self._supported_datasets = None
+        self._supported_accessors = None
+
+        self.dataset_key = None
+        self.dataset_name = None
+        for k, v in self.supported_datasets.items():
+            if dataset_name in v:
+                self.dataset_key = k
+                self.dataset_name = v
+        if self.dataset_name is None:
+            return ValueError(
+                f'Cant find support for param:dataset_name={dataset_name}'
+            )
+
+        # set variables
+        if isinstance(variables, str):
+            variables = [variables]
+        self.variables = variables
+
+        # control multithreading
+        self.multithread = multithread
 
         # init start/end time
         self.start_dt = self.get_datetime(start_time)
@@ -98,6 +122,72 @@ class DataAccessor:
             f'ERA5DataAccessor object successfully initialized! '
             f'Use ERA5DataAccessor.inputs_dict to verify your inputs.'
         )
+
+    @property
+    def supported_datasets_info(self) -> Dict[str, ModuleType]:
+        """
+        Finds all supported datasets by their info module.
+        NOTE: This can be converted into a Factory implementation later.
+        """
+        if self.supported_datasets_info is None:
+            self.supported_datasets_info = {}
+
+            # go thru each dataset and try to add their info module
+            # TODO: this could be a factory implementation!
+            try:
+                import era5_datasets_info
+                self.supported_datasets_info['ERA5'] = era5_datasets_info
+            except ImportError:
+                pass
+
+        # check if things look correct
+        if len(self.supported_datasets_info) == 0:
+            raise ValueError(
+                f'No datasets supported! Did you move/delete modules?'
+            )
+        return self.supported_datasets_info
+
+    @property
+    def supported_datasets(self) -> Dict[str, List[str]]:
+        """
+        Lists names of sub-datasets associated with each dataset.
+        """
+        if self._supported_datasets is None:
+            self._supported_datasets = {}
+
+            for key, module in self.supported_datasets_info.items():
+                self._supported_datasets[key] = module.DATASET_NAMES
+
+        # check if things look correct
+        if len(self._supported_datasets) != len(self.supported_datasets_info):
+            warnings.warn(
+                message=(
+                    'Cant find a list of dataset names for all dataset info '
+                    'files! This may cause problems.'
+                ),
+            )
+        return self._supported_datasets
+
+    @property
+    def supported_accessors(self) -> Dict[str, object]:
+        """
+        Returns the DataAccessor object for each dataset.
+        """
+        if self._supported_accessors is None:
+            self._supported_accessors = {}
+
+            for key, module in self.supported_datasets_info.items():
+                self._supported_accessors[key] = module.DATA_ACCESSOR
+
+        # check if things look correct
+        if len(self._supported_accessors) != len(self.supported_datasets_info):
+            warnings.warn(
+                message=(
+                    'Cant find a DataAccessor for all dataset info files! '
+                    'This may cause problems.'
+                ),
+            )
+        return self._supported_accessors
 
     @staticmethod
     def get_datetime(input_date: Union[str, datetime, int]) -> datetime:
@@ -179,9 +269,12 @@ class DataAccessor:
                 )
 
         # get accessor and pull data
-        data_accessor = self.dataset_accessors[self.dataset_source](
+        data_accessor = self.supported_accessors[self.dataset_key](
+            dataset_name=self.dataset_name,
+            thread_limit=None,
             multithread=self.multithread,
-            use_dask=DASK_DISTRIBUTE,
+            file_format=None,
+            # use_dask=DASK_DISTRIBUTE,
         )
 
         dataset = data_accessor.get_data(

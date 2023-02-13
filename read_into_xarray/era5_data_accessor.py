@@ -106,9 +106,9 @@ class CDSDataAccessor:
     def __init__(
         self,
         dataset_name: str,
-        file_format: Optional[str] = None,
         thread_limit: Optional[int] = None,
         multithread: bool = True,
+        file_format: Optional[str] = None,
     ) -> None:
 
         # check dataset compatibility
@@ -429,7 +429,7 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
     def get_data(
         self,
         dataset_name: str,
-        variables: Union[str, List[str]],
+        variables: List[str],
         start_dt: datetime,
         end_dt: datetime,
         bbox: Dict[str, float],
@@ -444,9 +444,6 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
             hours_step=hours_step,
             specific_hours=specific_hours,
         )
-
-        if isinstance(variables, str):
-            variables = [variables]
 
         # map variables to underlying data accessor
         accessor_variables_mapper = {}
