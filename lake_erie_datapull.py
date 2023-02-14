@@ -23,7 +23,7 @@ Thanks a bunch
 -Dan
 """
 START_TIME = '9/1/2015'
-END_TIME = '10/1/2016'
+END_TIME = '9/30/2016'
 AOI_SHP = Path(Path.cwd() / 'lake_erie_data/LEEM_boundary.shp')
 RESOLUTION = 100 # meters
 DATASET_NAME = 'reanalysis-era5-single-levels'
@@ -48,4 +48,4 @@ data_accessor = DataAccessor(
     multithread=True,
 )
 
-print(dir(data_accessor))
+data_accessor.get_data()

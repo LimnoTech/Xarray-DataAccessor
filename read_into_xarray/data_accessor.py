@@ -81,8 +81,8 @@ class DataAccessor:
         Arguments:
             :param dataset_name: A valid/supported dataset_name.
             :param variables: A list of variables from param:dataset_name.
-            :param start_time: Time/date to start at (non-inclusive).
-            :param end_time: Time/date to stop at (non-inclusive).
+            :param start_time: Time/date to start at (inclusive).
+            :param end_time: Time/date to stop at (inclusive).
             :param coordinates: Coordinates to define the AOI.
             :param csv_of_coords: A csv of lat/longs to define the AOI.
             :param shapefile: A shapefile (.shp) to define the AOI.
@@ -346,7 +346,7 @@ class DataAccessor:
             'Multithreading': str(self.multithread),
         }
 
-    def pull_data(
+    def get_data(
         self,
         overwrite: bool = False,
         dask_client_kwargs: Optional[dict] = None,
@@ -365,10 +365,11 @@ class DataAccessor:
                 )
 
         # get accessor and pull data
+        # TODO: debug wierd dask behavior
         data_accessor = self.supported_accessors[self.dataset_key](
             dataset_name=self.dataset_name,
             multithread=self.multithread,
-            use_dask=DASK_DISTRIBUTE,
+            # use_dask=DASK_DISTRIBUTE,
             dask_client_kwargs=dask_client_kwargs,
             kwargs=kwargs,
         )
