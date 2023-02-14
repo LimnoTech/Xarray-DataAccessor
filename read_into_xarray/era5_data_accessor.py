@@ -26,6 +26,7 @@ from typing import (
     Union,
     Optional,
 )
+from data_accessor import BoundingBoxDict
 """
 THIS IS THE MOVE: https://cds.climate.copernicus.eu/toolbox/doc/api.html
 NOTE: Data is accessed for the whole globe, then cropped on their end.
@@ -80,7 +81,7 @@ class AWSDataAccessor:
         variables: Union[str, List[str]],
         start_dt: datetime,
         end_dt: datetime,
-        bbox: Dict[str, float],
+        bbox: BoundingBoxDict,
         hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
@@ -269,7 +270,7 @@ class CDSDataAccessor:
         variables: Union[str, List[str]],
         start_dt: datetime,
         end_dt: datetime,
-        bbox: Dict[str, float],
+        bbox: BoundingBoxDict,
         hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
@@ -282,7 +283,9 @@ class CDSDataAccessor:
         # TODO: Handle query size
         raise NotImplementedError
 
-    def unlock_and_clean(output_dict: Dict[str, Dict[str, xr.Dataset]]) -> None:
+    def unlock_and_clean(
+        output_dict: Dict[str, Dict[str, xr.Dataset]],
+    ) -> None:
         """Cleans out the temp files"""
 
         # unlock files
@@ -374,11 +377,27 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
         dataset_name: str,
         multithread: bool = True,
         use_dask: bool = True,
+        dask_client_kwargs: Optional[dict] = None,
         use_cds_only: bool = False,
         file_format: str = 'netcdf',
-        dask_client_kwargs: Optional[dict] = None,
     ) -> None:
+        """Accessor class for ERA5 data. Uses both AWS and CDS endpoints.
 
+        Note that for most datasets only a single class is necessary,
+            however due to reading from the ERA5 AWS bucket being vastly faster
+            than CDS API calls, we mixed the two methods and use this class as a
+            wrapper of both.
+
+        Arguments:
+            :param dataset_name: Name of an ERA5 dataset.
+            :param multithread: Whether to multithread data fetching calls.
+            :param use_dask: Whether to use dask for multithreading.
+            :param dask_client_kwargs: Dask client kwargs for init.
+            :param use_cds_only: Controls whether to only use CDSDataAccessor.
+                NOTE: This is a kwarg not in DataAccessor.pull_data() arguments.
+            :param file_format: Controls temp files format saved by CDSDataAccessor.
+                NOTE: This is a kwarg not in DataAccessor.pull_data() arguments.
+        """
         # init multithreading
         self.multithread = multithread
         self.cores = int(multiprocessing.cpu_count())
@@ -388,12 +407,15 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
             from dask.distributed import Client
             dask_client = Client(kwargs=dask_client_kwargs)
 
+        # set file format (checking it is handled in CDSDataAccessor)
+        self.file_format = file_format
+
         # bring in dataset name
         verify_dataset(dataset_name)
         self.dataset_name = dataset_name
 
         # see if we can attempt to use aws
-        if self.dataset_name in AWSDataAccessor.supported_datasets:
+        if self.dataset_name in AWSDataAccessor.supported_datasets and not use_cds_only:
             self.use_aws = True
         else:
             self.use_aws = False
@@ -401,11 +423,6 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
         # control multithreading
         self.multithread = multithread
         self.cores = int(multiprocessing.cpu_count())
-
-        # bring in variables -> delegate to the Accessors!
-        self.all_possible_variables = list_variables(
-            dataset_name,
-        )
 
         # warn users about non compatible variables
         if len(cant_add_variables) > 0:
@@ -427,16 +444,32 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
 
     def get_data(
         self,
-        dataset_name: str,
         variables: List[str],
         start_dt: datetime,
         end_dt: datetime,
-        bbox: Dict[str, float],
+        bbox: BoundingBoxDict,
         hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
-        """Controls the API calls and returns a combined Dataset"""
+        """Gathers the desired variables for ones time/space AOI.
+
+        NOTE: Data is gathered from ERA5DataAccessor.dataset_name.
+
+        Arguments:
+            :param variables: List of variables to access.
+            :param start_dt: Datetime to start at (inclusive),
+            :param end_dt: Datetime to stop at (non-inclusive).
+            :param bbox: Dictionary with bounding box EPSG 4326 lat/longs.
+            :param hours_step: Changes the default hours time step from 1.
+                NOTE: This argument is not accessible from DataAccessor!
+            :param specific_hours: Only pull data from a specific hour(s).
+                NOTE: This argument is not accessible from DataAccessor!
+
+        Returns:
+            A xarray Dataset with all desired data.
+        """
         # TODO: make compatible with monthly requests
+        # TODO: think about how we want to allow access to hours_step and specific_hours
         time_dict = self.make_time_dict(
             start_dt,
             end_dt,
@@ -453,7 +486,7 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
         cds_variables = []
         if self.use_aws:
             aws_accessor = AWSDataAccessor(
-                dataset_name,
+                self.dataset_name,
                 thread_limit=self.cores,
                 multithread=self.multithread,
             )
@@ -465,9 +498,10 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
         # map remaining variables to CDS
         if not len(aws_variables) == len(variables):
             cds_accessor = CDSDataAccessor(
-                dataset_name,
+                self.dataset_name,
                 thread_limit=self.cores,
                 multithread=self.multithread,
+                file_format=self.file_format,
             )
             for var in [i for i in variables if i not in aws_accessor]:
                 if var in cds_accessor.possible_variable:
@@ -493,6 +527,7 @@ class ERA5DataAccessor(CDSDataAccessor, AWSDataAccessor):
             return datasets[0]
 
         # combine the data from multiple sources
+        # TODO: check this works
         try:
             for ds in datasets[1:]:
                 for var in ds.variables:

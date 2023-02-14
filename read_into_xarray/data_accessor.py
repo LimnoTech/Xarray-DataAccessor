@@ -23,8 +23,10 @@ except ImportError:
 try:
     import geopandas as gpd
     HAS_GEOPANDAS = True
+    Shapefile = Union[str, Path, gpd.GeoDataFrame]
 except ImportError:
     HAS_GEOPANDAS = False
+    Shapefile = Union[str, Path]
 try:
     import rioxarray
     HAS_RIOXARRAY = True
@@ -35,10 +37,10 @@ CoordsTuple = Tuple[float, float]
 
 
 class BoundingBoxDict(TypedDict):
-    north: float
+    west: float
     south: float
     east: float
-    west: float
+    north: float
 
 
 class DataAccessor:
@@ -64,7 +66,18 @@ class DataAccessor:
         raster: Optional[Union[str, Path, xr.DataArray]] = None,
         multithread: bool = True,
     ) -> None:
+        """Main data puller class.
 
+        Acts as a portal to underlying data accessor classes defined for 
+        specific datasets (i.e. ERA5, DAYMET, etc.). Responsible for cleaning
+        non-dataset-specific inputs (i.e. bounding box, datetimes), and making
+        sure the desired dataset exists.
+
+        All datasets must have a {dataset}_data_accessor.py and 
+        {dataset}_datasets_info.py file.
+        NOTE: We should switch to a Factory/Plugin architecture!
+
+        """
         # see if the dataset requested is available
         self._supported_datasets_info = None
         self._supported_datasets = None
@@ -238,26 +251,48 @@ class DataAccessor:
     def _bbox_from_coords(
         coords: Union[CoordsTuple, List[CoordsTuple]],
     ) -> BoundingBoxDict:
-        # TODO: add buffer so the edge isn't the exact coordinate
+        # TODO: add buffer so the edge isn't the exact coordinate?
+        # TODO : make method
         raise NotImplementedError
 
     @staticmethod
     def _bbox_from_coords_csv(
         csv: Union[str, Path, pd.DataFrame],
     ) -> BoundingBoxDict:
+        # TODO : make method
         raise NotImplementedError
 
     @staticmethod
     def _bbox_from_shp(
         shapefile: Union[str, Path],
     ) -> BoundingBoxDict:
-        # note: gpd.GeoDataFrame not in the type hint because it's not necessarily installed
         if not HAS_GEOPANDAS:
             raise ImportError(
                 f'To create a bounding box from shapefile you need geopandas installed!'
             )
+        if isinstance(shapefile, str):
+            shapefile = Path(shapefile)
+        if not shapefile.exists():
+            raise FileNotFoundError(
+                f'Input path {shapefile} is not found.')
+        if not shapefile.suffix == '.shp':
+            raise ValueError(
+                f'Input path {shapefile} is not a .shp file!'
+            )
 
-        raise NotImplementedError
+        # read GeoDataFrame and reproject if necessary
+        geo_df = gpd.read_file(shapefile)
+        if geo_df.crs.to_epsg() != 4326:
+            geo_df = geo_df.to_crs(4326)
+        west, south, east, north = geo_df.geometry.total_bounds
+
+        # return bounding box dictionary
+        return {
+            'west': west,
+            'south': south,
+            'east': east,
+            'north': north,
+        }
 
     @staticmethod
     def _bbox_from_raster(
@@ -267,6 +302,7 @@ class DataAccessor:
             raise ImportError(
                 f'To create a bounding box from raster you need rioxarray installed!'
             )
+        # TODO : make method
         raise NotImplementedError
 
     def get_bounding_box(
@@ -300,6 +336,8 @@ class DataAccessor:
     def pull_data(
         self,
         overwrite: bool = False,
+        dask_client_kwargs: Optional[dict] = None,
+        **kwargs,
     ) -> xr.Dataset:
         # prevent accidental overwrite since the calls take a while
         if self.xarray_dataset is not None:
@@ -316,14 +354,13 @@ class DataAccessor:
         # get accessor and pull data
         data_accessor = self.supported_accessors[self.dataset_key](
             dataset_name=self.dataset_name,
-            thread_limit=None,
             multithread=self.multithread,
-            file_format=None,
-            # use_dask=DASK_DISTRIBUTE,
+            use_dask=DASK_DISTRIBUTE,
+            dask_client_kwargs=dask_client_kwargs,
+            kwargs=kwargs,
         )
 
         dataset = data_accessor.get_data(
-            self.dataset_name,
             self.variables,
             self.start_dt,
             self.end_dt,
