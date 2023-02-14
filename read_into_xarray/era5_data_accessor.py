@@ -644,10 +644,11 @@ class ERA5DataAccessor:
             if v is None:
                 del_keys.append(k)
         if len(del_keys) > 0:
-            datasets_dict.pop(k)
             warnings.warn(
                 f'Could not get data for the following variables: {del_keys}'
             )
+            for k in del_keys:
+                datasets_dict.pop(k)
 
         # if just one variable, return the dataset
         if len(datasets_dict) == 1:
@@ -659,11 +660,12 @@ class ERA5DataAccessor:
 
         # combine the data from multiple sources
         try:
-            return xr.merge(list(datasets_dict.values))
+            return xr.merge(list(datasets_dict.values()))
         # allow data to be salvaged if merging fails
-        except Exception:
+        except Exception as e:
             warnings.warn(
                 f'There was an issue combing ERA5 data from multiple sources. '
-                f'All requested data is within the returned list of xr.Datasets.'
+                f'All requested data is within the returned list of xr.Datasets. '
+                f'Exception: {e}'
             )
             return datasets_dict
