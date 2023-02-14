@@ -75,8 +75,21 @@ class DataAccessor:
 
         All datasets must have a {dataset}_data_accessor.py and 
         {dataset}_datasets_info.py file.
-        NOTE: We should switch to a Factory/Plugin architecture!
+        NOTE: We should switch to a Factory/Plugin architecture for data accessors!
+        NOTE: We should switch to "partial implementation" for BBOX arguments.
 
+        Arguments:
+            :param dataset_name: A valid/supported dataset_name.
+            :param variables: A list of variables from param:dataset_name.
+            :param start_time: Time/date to start at (non-inclusive).
+            :param end_time: Time/date to stop at (non-inclusive).
+            :param coordinates: Coordinates to define the AOI.
+            :param csv_of_coords: A csv of lat/longs to define the AOI.
+            :param shapefile: A shapefile (.shp) to define the AOI.
+            :param raster: A raster to define the AOI.
+            :param multithread: Whether to multi-thread of not.
+                If dask is imported, multi-threading is handled by dask.
+                Otherwise it is handled by base Python.
         """
         # see if the dataset requested is available
         self._supported_datasets_info = None
