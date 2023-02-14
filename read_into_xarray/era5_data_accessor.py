@@ -639,9 +639,15 @@ class ERA5DataAccessor:
                 )
 
         # remove and warn about NoneType responses
+        del_keys = []
         for k, v in datasets_dict.items():
             if v is None:
-                datasets_dict.pop(k)
+                del_keys.append(k)
+        if len(del_keys) > 0:
+            datasets_dict.pop(k)
+            warnings.warn(
+                f'Could not get data for the following variables: {del_keys}'
+            )
 
         # if just one variable, return the dataset
         if len(datasets_dict) == 1:
