@@ -386,7 +386,7 @@ class CDSDataAccessor:
             for key in keys:
                 datasets.append(var_dict[key])
             all_data_dict[variable] = xr.concat(datasets, dim='time')
-            all_data_dict[variable].name = variable
+            all_data_dict[variable]['name'] = variable
 
         return all_data_dict
 
