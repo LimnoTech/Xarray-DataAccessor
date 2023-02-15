@@ -13,6 +13,9 @@ from typing import (
 from types import ModuleType
 import xarray as xr
 import pandas as pd
+import numpy as np
+import rioxarray
+from rasterio.enums import Resampling
 
 # control weather to use dask for xarray computation
 try:
@@ -27,14 +30,9 @@ try:
 except ImportError:
     HAS_GEOPANDAS = False
     Shapefile = Union[str, Path]
-try:
-    import rioxarray
-    HAS_RIOXARRAY = True
-except ImportError:
-    HAS_RIOXARRAY = False
 
 CoordsTuple = Tuple[float, float]
-
+ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
 
 class BoundingBoxDict(TypedDict):
     west: float
@@ -65,6 +63,7 @@ class DataAccessor:
         shapefile: Optional[Union[str, Path]] = None,
         raster: Optional[Union[str, Path, xr.DataArray]] = None,
         multithread: bool = True,
+        use_dask: bool = DASK_DISTRIBUTE,
     ) -> None:
         """Main data puller class.
 
@@ -114,6 +113,7 @@ class DataAccessor:
 
         # control multithreading
         self.multithread = multithread
+        self.use_dask = use_dask
 
         # init start/end time
         self.start_dt = self.get_datetime(start_time)
@@ -311,10 +311,7 @@ class DataAccessor:
     def _bbox_from_raster(
         raster: Union[str, Path, xr.DataArray],
     ) -> BoundingBoxDict:
-        if not HAS_RIOXARRAY:
-            raise ImportError(
-                f'To create a bounding box from raster you need rioxarray installed!'
-            )
+
         # TODO : make method
         raise NotImplementedError
 
@@ -346,11 +343,106 @@ class DataAccessor:
             'Multithreading': str(self.multithread),
         }
 
+    def chunk_dataset(
+        self,
+        chunk_size: int,
+    ) -> xr.Dataset:
+        if self.xarray_dataset is None:
+            raise ValueError(
+                'self.xarray_dataset is None! You must use get_data() first.'
+            )
+
+    def resample_dataset(
+        self,
+        resolution_factor: Optional[Union[int, float]] = None,
+        xy_resolution_factors: Optional[ResolutionTuple] = None,
+        resample_method: Optional[str] = None,
+    ) -> xr.Dataset:
+        """Resamples self.xarray_dataset
+
+        resolution_factor: the number of times FINER to make the dataset (applied to both dimensions).
+            For example: resolution=10 on a 0.25 -> 0.025 resolution.
+        xy_resolution_factors: Allows one to specify a resolution factor for the X[0] and Y[1] dimensions.
+        resample_method: A valid resampling method from rasterio.enums.Resample (default='nearest').
+            NOTE: Do not use any averaging resample methods when working with a categorical raster!
+            Bilinear resampling is the default.
+        """
+        #TODO: switch to xarray.interp() This works but overflows memory for large datasets.
+        # verify all required inputs are present
+        if self.xarray_dataset is None:
+            raise ValueError(
+                'self.xarray_dataset is None! You must use get_data() first.'
+            )
+        if resolution_factor is None and xy_resolution_factors is None:
+            raise ValueError(
+                'Must provide an input for either param:resolution_factor or '
+                'param:xy_resolution_factors'
+            )
+        
+        # verify the resample methods
+        real_methods = vars(Resampling)['_member_names_']
+        if resample_method is None:
+            resample_method = 'bilinear'
+        elif resample_method not in real_methods:
+            raise ValueError(
+                f'Resampling method {resample_method} is invalid! Please select from {real_methods}'
+            )
+        
+        # apply the resampling 
+        if xy_resolution_factors is None:
+            xy_resolution_factors = (resolution_factor, resolution_factor)
+
+        x_dim = self.xarray_dataset.attrs['x_dim']
+        y_dim = self.xarray_dataset.attrs['y_dim']
+
+        # rioxarray expects x/y dimensions
+        renamed = False
+        if x_dim != 'x' or y_dim != 'y':
+            self.xarray_dataset = self.xarray_dataset.rename(
+                {x_dim: 'x', y_dim: 'y'}
+            )
+            renamed = True
+
+        width = int(len(self.xarray_dataset.x) * xy_resolution_factors[0])
+        height = int(len(self.xarray_dataset.y) * xy_resolution_factors[1])
+
+        # TODO: switch to a slicing design using get_multithread()
+        self.xarray_dataset = self.xarray_dataset.rio.reproject(
+            dst_crs=self.xarray_dataset.rio.crs,
+            shape=(height, width),
+            resampling=getattr(Resampling, resample_method),
+            kwargs={'dst_nodata': np.nan},
+        )
+
+        if renamed:
+            self.xarray_dataset = self.xarray_dataset.rename(
+                {'x': x_dim, 'y': y_dim}
+            )
+        return self.xarray_dataset
+            
+
     def get_data(
         self,
         overwrite: bool = False,
+        resolution_factor: Optional[Union[int, float]] = None,
+        xy_resolution_factors: Optional[ResolutionTuple] = None,
+        chunk_size: Optional[int] = None,
+        chunk_dict: Optional[Dict[str, int]] = None,
+        dont_chunk: bool = False,
         **kwargs,
     ) -> xr.Dataset:
+        """Main function to get data. Updated self.xarray_dataset
+
+        Arguments:
+            :param overwrite:
+            :param resolution_factor:
+            :param chunk_size:
+            :param chunk_dict:
+            :param dont_chunk:
+
+        Return:
+            An xarray.Dataset of the desired specification.
+        """
         # prevent accidental overwrite since the calls take a while
         if self.xarray_dataset is not None:
             if overwrite:
@@ -364,11 +456,10 @@ class DataAccessor:
                 )
 
         # get accessor and pull data
-        # TODO: debug wierd dask behavior
         data_accessor = self.supported_accessors[self.dataset_key](
             dataset_name=self.dataset_name,
             multithread=self.multithread,
-            use_dask=DASK_DISTRIBUTE,
+            use_dask=self.use_dask,
             kwargs=kwargs,
         )
 
@@ -378,8 +469,42 @@ class DataAccessor:
             self.end_dt,
             self.bbox,
         )
+
+        # return the dictionary is something went wrong
+        if isinstance(dataset, dict):
+            warnings.warn(
+                'Dictionary of datasets being returned since merged failed!'
+            )
+            return dataset
+
         # set object attribute to point to the dataset
         self.xarray_dataset = dataset
+
+        # resample the dataset if desired
+        if resolution_factor is not None:
+            # quickly chunk to avoid worker memory overflow
+            # TODO: remove this chunking for straight multithread
+            self.xarray_dataset = self.xarray_dataset.chunk({'time': 5})
+            self.resample_dataset(
+                resolution_factor=resolution_factor,
+                xy_resolution_factors=xy_resolution_factors,
+            )
+
+        # chunk dataset if desired (default iss 500000 observations per chunk)
+        if chunk_size is None:
+            chunk_size = 500000
+        if chunk_dict is not None:
+            try:
+                self.xarray_dataset = self.xarray_dataset.chunk(chunk_dict)
+            except ValueError as e:
+                warnings.warn(
+                    f'Could not use param:chunk_dict due to the following exception: {e}'
+                    f'Defaulting to chunk size = {chunk_size}.'
+                )
+                chunk_dict = None
+        if not dont_chunk and chunk_dict is None:
+            self.chunk_dataset(chunk_size=chunk_size)
+
         return self.xarray_dataset
 
     # TODO: update this function

@@ -25,7 +25,7 @@ from typing import (
     Union,
     Optional,
 )
-from read_into_xarray.multi_threading import DaskClass
+from read_into_xarray.multi_threading import DaskClass, get_multithread
 from read_into_xarray.data_accessor import BoundingBoxDict
 """
 THIS IS THE MOVE: https://cds.climate.copernicus.eu/toolbox/doc/api.html
@@ -342,29 +342,10 @@ class CDSDataAccessor:
             specific_hours=specific_hours,
         )
 
-        # multi process requests
-        if use_dask:
-            try:
-                dask_class = DaskClass(thread_limit=self.thread_limit)
-                client = dask_class.client
-
-                # get as completed function
-                as_completed_func = dask_class.as_completed
-            except Exception as e:
-                warnings.warn(
-                    f'Could not start dask -> reverting to concurrent.futures. '
-                    f'The following exception was received: {e}'
-                )
-                del as_completed
-                use_dask = False
-
-        if not use_dask:
-            from concurrent.futures import (
-                ThreadPoolExecutor,
-                as_completed,
-            )
-            as_completed_func = as_completed
-            client = ThreadPoolExecutor(max_workers=self.thread_limit)
+        client, as_completed_func = get_multithread(
+            use_dask=use_dask,
+            thread_limit=self.thread_limit,
+        )
 
         # make a dictionary to store all data
         all_data_dict = {}
@@ -618,7 +599,14 @@ class ERA5DataAccessor:
 
         # combine the data from multiple sources
         try:
-            return xr.merge(list(datasets_dict.values()))
+            out_ds = xr.merge(list(datasets_dict.values())).rio.write_crs(4326)
+
+            # write attributes
+            out_ds.attrs['x_dim'] = 'longitude'
+            out_ds.attrs['y_dim'] = 'latitude'
+            out_ds.attrs['EPSG'] = 4326
+            return out_ds
+
         # allow data to be salvaged if merging fails
         except Exception as e:
             warnings.warn(

@@ -1,3 +1,5 @@
+import warnings
+from typing import Tuple
 
 class DaskClass:
     """Prevents multiple clients from being started simultaneously"""
@@ -27,3 +29,33 @@ class DaskClass:
             self.as_completed = as_completed
 
             DaskClass.dask_classes.append(self)
+
+def get_multithread(
+    use_dask: bool,
+    thread_limit: int,
+) -> Tuple[object, callable]:
+    # multi process requests
+    if use_dask:
+        try:
+            dask_class = DaskClass(thread_limit=thread_limit)
+            client = dask_class.client
+
+            # get as completed function
+            as_completed_func = dask_class.as_completed
+        except Exception as e:
+            warnings.warn(
+                f'Could not start dask -> reverting to concurrent.futures. '
+                f'The following exception was received: {e}'
+            )
+            del as_completed
+            use_dask = False
+
+    if not use_dask:
+        from concurrent.futures import (
+            ThreadPoolExecutor,
+            as_completed,
+        )
+        as_completed_func = as_completed
+        client = ThreadPoolExecutor(max_workers=thread_limit)
+
+    return (client, as_completed_func)
