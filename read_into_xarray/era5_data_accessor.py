@@ -1,9 +1,7 @@
 import xarray as xr
 import cdsapi
-import geopandas as gpd
 import warnings
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 import pandas as pd
 import tempfile
@@ -27,6 +25,7 @@ from typing import (
     Union,
     Optional,
 )
+from read_into_xarray.multi_threading import DaskClass
 from read_into_xarray.data_accessor import BoundingBoxDict
 """
 THIS IS THE MOVE: https://cds.climate.copernicus.eu/toolbox/doc/api.html
@@ -77,6 +76,7 @@ class AWSDataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
+        use_dask: bool = False,
         hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
@@ -324,6 +324,7 @@ class CDSDataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
+        use_dask: bool = False,
         hours_step: int = 1,  # TODO: deal with optionality here
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
@@ -341,36 +342,61 @@ class CDSDataAccessor:
             specific_hours=specific_hours,
         )
 
+        # multi process requests
+        if use_dask:
+            try:
+                dask_class = DaskClass(thread_limit=self.thread_limit)
+                client = dask_class.client
+
+                # get as completed function
+                as_completed_func = dask_class.as_completed
+            except Exception as e:
+                warnings.warn(
+                    f'Could not start dask -> reverting to concurrent.futures. '
+                    f'The following exception was received: {e}'
+                )
+                del as_completed
+                use_dask = False
+
+        if not use_dask:
+            from concurrent.futures import (
+                ThreadPoolExecutor,
+                as_completed,
+            )
+            as_completed_func = as_completed
+            client = ThreadPoolExecutor(max_workers=self.thread_limit)
+
         # make a dictionary to store all data
         all_data_dict = {}
 
-        for variable in variables:
-            logging.info(f'Getting {variable} from CDS API')
-            # store futures
-            var_dict = {}
-            input_dicts = []
-            for i, time_dict in enumerate(time_dicts):
-                input_dicts.append(dict(
-                    time_dict,
-                    **{
-                        'product_type': 'reanalysis',
-                        'variable': variable,
-                        'format': self.file_format,
-                        'grid': [0.25, 0.25],
-                        'area': [
-                            bbox['south'],
-                            bbox['west'],
-                            bbox['north'],
-                            bbox['east'],
-                        ],
-                        'index': i,
-                    }
-                ))
-            with ThreadPoolExecutor(max_workers=self.thread_limit) as executor:
+        with client as executor:
+            for variable in variables:
+                logging.info(f'Getting {variable} from CDS API')
+                # store futures
+                var_dict = {}
+                input_dicts = []
+                for i, time_dict in enumerate(time_dicts):
+                    input_dicts.append(dict(
+                        time_dict,
+                        **{
+                            'product_type': 'reanalysis',
+                            'variable': variable,
+                            'format': self.file_format,
+                            'grid': [0.25, 0.25],
+                            'area': [
+                                bbox['south'],
+                                bbox['west'],
+                                bbox['north'],
+                                bbox['east'],
+                            ],
+                            'index': i,
+                        }
+                    ))
+
                 futures = {
                     executor.submit(self._get_api_response, arg): arg for arg in input_dicts
                 }
-                for future in as_completed(futures):
+                for future in as_completed_func(futures):
                     try:
                         index, ds = future.result()
                         var_dict[index] = ds
@@ -379,19 +405,19 @@ class CDSDataAccessor:
                             f'Exception hit!: {e}'
                         )
 
-            # reconstruct each variable into a DataArray
-            keys = list(var_dict.keys())
-            keys.sort()
-            datasets = []
-            for key in keys:
-                datasets.append(var_dict[key])
-            ds = xr.concat(
-                datasets,
-                dim='time',
-            )
-            all_data_dict[variable] = ds.rename(
-                {list(ds.data_vars)[0]: variable},
-            )
+                # reconstruct each variable into a DataArray
+                keys = list(var_dict.keys())
+                keys.sort()
+                datasets = []
+                for key in keys:
+                    datasets.append(var_dict[key])
+                ds = xr.concat(
+                    datasets,
+                    dim='time',
+                )
+                all_data_dict[variable] = ds.rename(
+                    {list(ds.data_vars)[0]: variable},
+                )
 
         return all_data_dict
 
@@ -419,68 +445,6 @@ class CDSDataAccessor:
                     message=f'Could not delete temp file {t_file}',
                 )
 
-    def get_era5_hourly_point_data(
-        self,
-        variables_dict: Dict[str, str],
-        coords_dict: Optional[Dict[str, Tuple[float, float]]] = None,
-        file_format: str = 'netcdf',
-    ) -> Dict[str, Dict[str, xr.Dataset]]:
-        """DEPRECATED JUST FOR REFERENCE"""
-
-        # make a list to store the output datasets
-        out_datasets = {}
-
-        # prep request dictionary
-        time_dict = self.make_hourly_time_dict()
-
-        # verify file_format
-        if file_format not in list(self.file_format_dict.keys()):
-            raise ValueError(
-                f'param:file_format must be in {self.file_format_dict.keys()}!'
-            )
-
-        for station_id, coords in coords_dict.items():
-            out_datasets[station_id] = {}
-
-            for variable in list(variables_dict.keys()):
-                long, lat = coords
-                area = [lat-0.5, long-0.5, lat+0.5, long+0.5]
-
-                input_dict = dict(
-                    time_dict,
-                    **{
-                        'product_type': 'reanalysis',
-                        'variable': variable,
-                        'format': file_format,
-                        'grid': [1.0, 1.0],
-                        'area': area,
-                    }
-                )
-
-                # set up temporary file output
-                temp_file = Path(
-                    tempfile.TemporaryFile(
-                        dir=Path.cwd(),
-                        prefix='era5_hourly_data',
-                        suffix=self.file_format_dict[file_format],
-                    ).name
-                ).name
-
-                # get the data
-                output = self.client.retrieve(
-                    'reanalysis-era5-single-levels',
-                    input_dict,
-                    temp_file,
-                )
-
-                # open dataset in xarray
-                with urlopen(output.location) as output:
-                    out_datasets[station_id][variable] = xr.open_dataset(
-                        output.read(),
-                    )
-
-        return out_datasets
-
 
 class ERA5DataAccessor:
 
@@ -489,8 +453,7 @@ class ERA5DataAccessor:
         dataset_name: str,
         multithread: bool = True,
         use_dask: bool = False,
-        dask_client_kwargs: Optional[dict] = None,
-        use_cds_only: bool = False,
+        use_cds_only: bool = True,  # TODO: switch back after data pull for Dan
         file_format: str = 'netcdf',
         **kwargs,
     ) -> None:
@@ -516,10 +479,6 @@ class ERA5DataAccessor:
         self.cores = int(multiprocessing.cpu_count())
         self.use_dask = use_dask
 
-        if self.use_dask:
-            from dask.distributed import Client
-            dask_client = Client(kwargs=dask_client_kwargs)
-
         # set file format (checking it is handled in CDSDataAccessor)
         self.file_format = file_format
 
@@ -539,6 +498,7 @@ class ERA5DataAccessor:
             multithread=self.multithread,
             file_format=file_format,
         )
+        self.all_possible_variables = self.cds_data_accessor.possible_variables()
 
         if self.dataset_name in AWSDataAccessor.supported_datasets and not use_cds_only:
             self.use_aws = True
@@ -547,20 +507,12 @@ class ERA5DataAccessor:
                 thread_limit=self.cores,
                 multithread=self.multithread,
             )
+            self.all_possible_variables = list(
+                set(self.all_possible_variables +
+                    self.aws_data_accessor.possible_variables())
+            )
         else:
             self.use_aws = False
-
-        # warn users about non compatible variables
-        self.possible_variables = self.cds_data_accessor.possible_variables()
-        # if len(cant_add_variables) > 0:
-        #    warnings.warn(
-        #        f'variables {cant_add_variables} are not valid for param:'
-        #        f'dataset_name={self.dataset_name}, param:dataset_source='
-        #        f'{self.dataset_source}.\nPrint DataAccessor.'
-        #        f'possible_variables to see all valid variables for '
-        #        f'the current dataset name/source combo!'
-        #    )
-        #    del cant_add_variables
 
     @property
     def dataset_accessors(self) -> Dict[str, object]:
@@ -634,6 +586,7 @@ class ERA5DataAccessor:
                         start_dt=start_dt,
                         end_dt=end_dt,
                         bbox=bbox,
+                        use_dask=self.use_dask,
                         hours_step=hours_step,
                         specific_hours=specific_hours,
                     ),

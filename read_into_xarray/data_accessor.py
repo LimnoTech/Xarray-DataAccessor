@@ -349,7 +349,6 @@ class DataAccessor:
     def get_data(
         self,
         overwrite: bool = False,
-        dask_client_kwargs: Optional[dict] = None,
         **kwargs,
     ) -> xr.Dataset:
         # prevent accidental overwrite since the calls take a while
@@ -369,8 +368,7 @@ class DataAccessor:
         data_accessor = self.supported_accessors[self.dataset_key](
             dataset_name=self.dataset_name,
             multithread=self.multithread,
-            # use_dask=DASK_DISTRIBUTE,
-            dask_client_kwargs=dask_client_kwargs,
+            use_dask=DASK_DISTRIBUTE,
             kwargs=kwargs,
         )
 
