@@ -26,6 +26,8 @@ dependencies:
   - ipympl
   - nodejs
   - hvplot
+  - holoviews
+  - geoviews
   - cartopy
 
 # Dev tools: Language Server Protocol (LSP) (Optional), for:
