@@ -1,6 +1,7 @@
 import warnings
 from typing import Tuple
 
+
 class DaskClass:
     """Prevents multiple clients from being started simultaneously"""
     dask_classes = []
@@ -10,7 +11,18 @@ class DaskClass:
         thread_limit: int,
     ) -> None:
 
-        # make sure a dask class has not already be instantiated
+        # make sure a dask class is not already running
+        DaskClass.dask_classes = [
+            c for c in DaskClass.dask_classes if c.client.status == 'running'
+        ]
+
+        # close all but one if multiple are running
+        if len(DaskClass.dask_classes) > 1:
+            warnings.warn('Multiple dask clients were running!')
+            for c in DaskClass.dask_classes[:-1]:
+                c.close()
+
+        # if one is running
         if len(DaskClass.dask_classes) > 0:
             dask_class = DaskClass.dask_classes[0]
             self.cluster = dask_class.cluster
@@ -29,6 +41,7 @@ class DaskClass:
             self.as_completed = as_completed
 
             DaskClass.dask_classes.append(self)
+
 
 def get_multithread(
     use_dask: bool,
