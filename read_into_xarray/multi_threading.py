@@ -28,7 +28,6 @@ class DaskClass:
             self.cluster = dask_class.cluster
             self.client = dask_class.client
             self.as_completed = dask_class.as_completed
-            self.dashboard_url = dask_class.dashboard_url
 
         # controls it as threading, with one thread per N workers
         else:
@@ -40,7 +39,6 @@ class DaskClass:
             )
             self.client = Client(self.cluster)
             self.as_completed = as_completed
-            self.dashboard_url = self.client.scheduler_info()['dashboard']
 
             DaskClass.dask_classes.append(self)
         print(
