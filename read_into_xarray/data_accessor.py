@@ -1,5 +1,8 @@
 import warnings
+import logging
 import multiprocessing
+import gc
+from read_into_xarray.multi_threading import get_multithread
 from pathlib import Path
 from datetime import datetime
 from typing import (
@@ -14,8 +17,8 @@ from types import ModuleType
 import xarray as xr
 import pandas as pd
 import numpy as np
-import rioxarray
 from rasterio.enums import Resampling
+from rasterio.crs import CRS
 
 # control weather to use dask for xarray computation
 try:
@@ -31,14 +34,24 @@ except ImportError:
     HAS_GEOPANDAS = False
     Shapefile = Union[str, Path]
 
-CoordsTuple = Tuple[float, float]
+CoordsTuple = Tuple[float, float]  # lat/long
 ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
+
 
 class BoundingBoxDict(TypedDict):
     west: float
     south: float
     east: float
     north: float
+
+
+class ResampleDict(TypedDict):
+    data: xr.Dataset
+    width: int
+    height: int
+    resampling_method: str
+    crs: CRS
+    index: int
 
 
 class DataAccessor:
@@ -352,6 +365,18 @@ class DataAccessor:
                 'self.xarray_dataset is None! You must use get_data() first.'
             )
 
+    def _resample_slice(
+        self,
+        resample_dict: ResampleDict,
+    ) -> Tuple[int, xr.Dataset]:
+        out_ds = resample_dict['data'].rio.reproject(
+            dst_crs=resample_dict['crs'],
+            shape=(resample_dict['height'], resample_dict['width']),
+            resampling=getattr(Resampling, resample_dict['resampling_method']),
+            kwargs={'dst_nodata': np.nan},
+        )
+        return (resample_dict['index'], out_ds)
+
     def resample_dataset(
         self,
         resolution_factor: Optional[Union[int, float]] = None,
@@ -367,7 +392,7 @@ class DataAccessor:
             NOTE: Do not use any averaging resample methods when working with a categorical raster!
             Bilinear resampling is the default.
         """
-        #TODO: switch to xarray.interp() This works but overflows memory for large datasets.
+        # TODO: switch to xarray.interp() This works but overflows memory for large datasets.
         # verify all required inputs are present
         if self.xarray_dataset is None:
             raise ValueError(
@@ -378,7 +403,7 @@ class DataAccessor:
                 'Must provide an input for either param:resolution_factor or '
                 'param:xy_resolution_factors'
             )
-        
+
         # verify the resample methods
         real_methods = vars(Resampling)['_member_names_']
         if resample_method is None:
@@ -387,8 +412,8 @@ class DataAccessor:
             raise ValueError(
                 f'Resampling method {resample_method} is invalid! Please select from {real_methods}'
             )
-        
-        # apply the resampling 
+
+        # apply the resampling
         if xy_resolution_factors is None:
             xy_resolution_factors = (resolution_factor, resolution_factor)
 
@@ -405,21 +430,22 @@ class DataAccessor:
 
         width = int(len(self.xarray_dataset.x) * xy_resolution_factors[0])
         height = int(len(self.xarray_dataset.y) * xy_resolution_factors[1])
+        crs = self.xarray_dataset.rio.crs
 
-        # TODO: switch to a slicing design using get_multithread()
-        self.xarray_dataset = self.xarray_dataset.rio.reproject(
-            dst_crs=self.xarray_dataset.rio.crs,
-            shape=(height, width),
-            resampling=getattr(Resampling, resample_method),
-            kwargs={'dst_nodata': np.nan},
-        )
+        self.xarray_dataset = self._resample_slice({
+            'data': self.xarray_dataset.chunk({'time': 1, 'x': 10, 'y': 10}),
+            'height': height,
+            'width': width,
+            'resampling_method': resample_method,
+            'crs': crs,
+            'index': 1,
+        })[-1]
 
         if renamed:
             self.xarray_dataset = self.xarray_dataset.rename(
                 {'x': x_dim, 'y': y_dim}
             )
         return self.xarray_dataset
-            
 
     def get_data(
         self,
@@ -483,8 +509,6 @@ class DataAccessor:
         # resample the dataset if desired
         if resolution_factor is not None:
             # quickly chunk to avoid worker memory overflow
-            # TODO: remove this chunking for straight multithread
-            self.xarray_dataset = self.xarray_dataset.chunk({'time': 5})
             self.resample_dataset(
                 resolution_factor=resolution_factor,
                 xy_resolution_factors=xy_resolution_factors,
@@ -507,50 +531,168 @@ class DataAccessor:
 
         return self.xarray_dataset
 
-    # TODO: update this function
-
-    def convert_output_to_table(
+    def unlock_and_clean(
         self,
-        variables_dict: Dict[str, str],
-        coords_dict: Dict[str, CoordsTuple],
-        output_dict: Dict[str, Dict[str, xr.Dataset]],
-    ) -> pd.DataFrame:
-        """Converts the output of a ERA5DataAccessor function to a pandas dataframe"""
-        df_dicts = []
+    ) -> None:
+        """If temp files were created, this deletes them"""
 
-        for station_id, coords in coords_dict.items():
-            df_dict = {
-                'station_id': None,
-                'datetime': None,
-            }
+        temp_files = []
+        for file in Path.cwd().iterdir():
+            if 'temp_data' in file.name:
+                temp_files.append(file)
 
-            print(output_dict[station_id].keys())
-            for variable, unit in variables_dict.items():
-                print(f'Adding {variable}')
-                data_array = output_dict[station_id][variable].to_array()
-                data_array = data_array.sel(
-                    {'longitude': coords[0], 'latitude': coords[1]},
-                    method='nearest',
+        if len(temp_files) > 1:
+            # try to unlink data from file
+            self.xarray_dataset.close()
+
+        could_not_delete = []
+        for t_file in temp_files:
+            try:
+                t_file.unlink()
+            except PermissionError:
+                could_not_delete.append(t_file)
+        if len(could_not_delete) > 0:
+            warnings.warn(
+                message=(
+                    f'Could not delete {len(could_not_delete)} temp files '
+                    f'in directory {Path.cwd()}. You may want to clean them manually.'
+                ),
+            )
+
+    def _coords_in_bbox(
+        self,
+        coords: CoordsTuple,
+    ) -> bool:
+        lat, lon = coords
+        conditionals = [
+            (lat <= self.bbox['north']),
+            (lat >= self.bbox['south']),
+            (lon <= self.bbox['east']),
+            (lon >= self.bbox['west']),
+        ]
+        if len(list(set(conditionals))) == 1 and conditionals[0] is True:
+            return True
+        return False
+
+    def get_data_tables(
+        self,
+        variables: Optional[List[str]] = None,
+        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        coords_id_column: Optional[str] = None,
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+    ) -> Dict[str, pd.DataFrame]:
+
+        # clean variables input
+        if variables is None:
+            variables = list(self.xarray_dataset.data_vars)
+        else:
+            cant_add_variables = []
+            data_variables = []
+            for v in variables:
+                if v in list(self.xarray_dataset.data_vars):
+                    data_variables.append(v)
+                else:
+                    cant_add_variables.append(v)
+            variables = list(set(data_variables))
+            if len(cant_add_variables) > 0:
+                warnings.warn(
+                    f'The following requested variables are not in the dataset:'
+                    f' {cant_add_variables}.'
                 )
 
-                # init datetime and station id column if empty
-                if df_dict['datetime'] is None:
-                    df_dict['datetime'] = data_array.time.values
-                if df_dict['station_id'] is None:
-                    df_dict['station_id'] = [
-                        station_id for i in range(len(data_array.time.values))]
+        coords_dict = {}
 
-                # add variable data
-                df_dict[f'{variable}_{unit}'] = data_array.variable.values.squeeze()
+        # get coords input from csv
+        # TODO: this can probably be its own function
+        if csv_of_coords is not None:
+            if isinstance(csv_of_coords, str):
+                csv_of_coords = Path(csv_of_coords)
+            if isinstance(csv_of_coords, Path):
+                if not csv_of_coords.exists() or not csv_of_coords.suffix == '.csv':
+                    raise ValueError(
+                        f'param:csv_of_coords must be a valid .csv file.'
+                    )
+            if isinstance(csv_of_coords, pd.DataFrame):
+                coords_df = csv_of_coords
+            else:
+                coords_df = pd.read_csv(csv_of_coords)
 
-            df_dicts.append(pd.DataFrame.from_dict(df_dict))
+            if coords_id_column is not None:
+                coords_df.set_index(coords_id_column, inplace=True)
 
-        out_df = pd.concat(df_dicts)
-
-        # set the index
-        if len(out_df.station_id.unique()) == 1:
-            out_df.set_index('datetime', inplace=True)
+            for i, row in coords_df.iterrows():
+                coords_dict[i] = (row['lat'], row['lon'])
+        elif coords is not None:
+            if isinstance(coords, tuple):
+                coords = [coords]
+            for i, coord in enumerate(coords):
+                coords_dict[i] = (coord[0], coord[1])
         else:
-            out_df.set_index(['station_id', 'datetime'], inplace=True)
+            raise ValueError(
+                'Must specify either param:coords or param:csv_of_coords'
+            )
 
-        return out_df
+        # extract data and build pandas dataframes, add to out_dfs_dict
+        out_dfs_dict = {}
+        for variable in variables:
+            pandas_series = []
+            dt_index = False
+            for id, coord in coords_dict.items():
+                da = self.xarray_dataset.sel(
+                    {
+                        self.xarray_dataset.attrs['y_dim']: coord[0],
+                        self.xarray_dataset.attrs['x_dim']: coord[1],
+                    },
+                    method='nearest',
+                )
+                if not dt_index:
+                    dt_series = pd.Series(
+                        data=da.time.values,
+                        name='datetime',
+                    )
+                    pandas_series.append(dt_series)
+                    dt_index = True
+                pandas_series.append(pd.Series(
+                    data=da[variable].values,
+                    name=str(id),
+                ))
+            out_dfs_dict[variable] = pd.concat(pandas_series, axis=1)
+            out_dfs_dict[variable].set_index('datetime', inplace=True)
+
+        # save if necessary
+        if save_table_dir:
+            no_success = False
+            if isinstance(save_table_dir, str):
+                save_table_dir = Path(save_table_dir)
+            if not save_table_dir.exists():
+                warnings.warn(
+                    f'Output directory {save_table_dir} does not exist!'
+                )
+            if save_table_suffix is None or save_table_suffix == '.parquet':
+                for variable in variables:
+                    out_dfs_dict[variable].to_parquet(
+                        Path(save_table_dir / f'{variable}.parquet'),
+                    )
+
+            elif save_table_suffix == '.csv':
+                for variable in variables:
+                    out_dfs_dict[variable].to_csv(
+                        Path(save_table_dir / f'{variable}.parquet'),
+                    )
+            elif save_table_suffix == '.xlsx':
+                for variable in variables:
+                    out_dfs_dict[variable].to_excel(
+                        Path(save_table_dir / f'{variable}.xlsx'),
+                    )
+            else:
+                warnings.warn(
+                    f'{save_table_suffix} is not a valid table format!'
+                )
+                no_success = True
+            if not no_success:
+                logging.info(
+                    f'Data for variables={variables} saved @ {save_table_dir}'
+                )
+        return out_dfs_dict
