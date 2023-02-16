@@ -299,7 +299,7 @@ class CDSDataAccessor:
         temp_file = Path(
             tempfile.TemporaryFile(
                 dir=Path.cwd(),
-                prefix='era5_hourly_data',
+                prefix='temp_data',
                 suffix=self.file_format_dict[self.file_format],
             ).name
         ).name
@@ -401,30 +401,6 @@ class CDSDataAccessor:
                 )
 
         return all_data_dict
-
-    def unlock_and_clean(
-        output_dict: Dict[str, Dict[str, xr.Dataset]],
-    ) -> None:
-        """Cleans out the temp files"""
-
-        # unlock files
-        for var_dict in output_dict.values():
-            for ds in var_dict.values():
-                ds.close()
-
-        # delete temp files
-        temp_files = []
-        for path in Path.cwd().iterdir():
-            if 'era5_hourly_data' in path.name:
-                temp_files.append(path)
-
-        for t_file in temp_files:
-            try:
-                t_file.unlink()
-            except PermissionError:
-                warnings.warn(
-                    message=f'Could not delete temp file {t_file}',
-                )
 
 
 class ERA5DataAccessor:
