@@ -46,7 +46,6 @@ class BoundingBoxDict(TypedDict):
 
 
 class ResampleDict(TypedDict):
-    data: xr.Dataset
     width: int
     height: int
     resampling_method: str
@@ -367,15 +366,18 @@ class DataAccessor:
 
     def _resample_slice(
         self,
+        data: xr.Dataset,
         resample_dict: ResampleDict,
     ) -> Tuple[int, xr.Dataset]:
-        out_ds = resample_dict['data'].rio.reproject(
-            dst_crs=resample_dict['crs'],
-            shape=(resample_dict['height'], resample_dict['width']),
-            resampling=getattr(Resampling, resample_dict['resampling_method']),
-            kwargs={'dst_nodata': np.nan},
+        return (
+            resample_dict['index'], 
+            data.rio.reproject(
+                dst_crs=resample_dict['crs'],
+                shape=(resample_dict['height'], resample_dict['width']),
+                resampling=getattr(Resampling, resample_dict['resampling_method']),
+                kwargs={'dst_nodata': np.nan},
+            )
         )
-        return (resample_dict['index'], out_ds)
 
     def resample_dataset(
         self,
@@ -431,9 +433,12 @@ class DataAccessor:
         width = int(len(self.xarray_dataset.x) * xy_resolution_factors[0])
         height = int(len(self.xarray_dataset.y) * xy_resolution_factors[1])
         crs = self.xarray_dataset.rio.crs
-
-        self.xarray_dataset = self._resample_slice({
-            'data': self.xarray_dataset.chunk({'time': 1, 'x': 10, 'y': 10}),
+        self.xarray_dataset = self.xarray_dataset.chunk(
+            {'time': 5, 'x': 100, 'y': 100},
+        )
+        self.xarray_dataset = self._resample_slice(
+            data=self.xarray_dataset,
+            resample_dict={
             'height': height,
             'width': width,
             'resampling_method': resample_method,
@@ -582,6 +587,7 @@ class DataAccessor:
         coords_id_column: Optional[str] = None,
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
     ) -> Dict[str, pd.DataFrame]:
 
         # clean variables input
@@ -663,6 +669,12 @@ class DataAccessor:
 
         # save if necessary
         if save_table_dir:
+            if not save_table_prefix:
+                prefix = ''
+            else:
+                prefix = save_table_prefix
+
+
             no_success = False
             if isinstance(save_table_dir, str):
                 save_table_dir = Path(save_table_dir)
@@ -673,18 +685,18 @@ class DataAccessor:
             if save_table_suffix is None or save_table_suffix == '.parquet':
                 for variable in variables:
                     out_dfs_dict[variable].to_parquet(
-                        Path(save_table_dir / f'{variable}.parquet'),
+                        Path(save_table_dir / f'{prefix}{variable}.parquet'),
                     )
 
             elif save_table_suffix == '.csv':
                 for variable in variables:
                     out_dfs_dict[variable].to_csv(
-                        Path(save_table_dir / f'{variable}.parquet'),
+                        Path(save_table_dir / f'{prefix}{variable}.parquet'),
                     )
             elif save_table_suffix == '.xlsx':
                 for variable in variables:
                     out_dfs_dict[variable].to_excel(
-                        Path(save_table_dir / f'{variable}.xlsx'),
+                        Path(save_table_dir / f'{prefix}{variable}.xlsx'),
                     )
             else:
                 warnings.warn(
