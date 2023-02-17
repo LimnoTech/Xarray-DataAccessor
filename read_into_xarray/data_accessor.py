@@ -53,6 +53,14 @@ class ResampleDict(TypedDict):
     index: int
 
 
+class DataGrabberDict(TypedDict):
+    point_data: xr.Dataset
+    nearest_x_idxs: np.array
+    nearest_y_idxs: np.array
+    point_ids: List[str]
+    xy_dims: Tuple[str, str]
+
+
 class DataAccessor:
     """Main class to get a data."""
 
@@ -370,11 +378,12 @@ class DataAccessor:
         resample_dict: ResampleDict,
     ) -> Tuple[int, xr.Dataset]:
         return (
-            resample_dict['index'], 
+            resample_dict['index'],
             data.rio.reproject(
                 dst_crs=resample_dict['crs'],
                 shape=(resample_dict['height'], resample_dict['width']),
-                resampling=getattr(Resampling, resample_dict['resampling_method']),
+                resampling=getattr(
+                    Resampling, resample_dict['resampling_method']),
                 kwargs={'dst_nodata': np.nan},
             )
         )
@@ -439,12 +448,12 @@ class DataAccessor:
         self.xarray_dataset = self._resample_slice(
             data=self.xarray_dataset,
             resample_dict={
-            'height': height,
-            'width': width,
-            'resampling_method': resample_method,
-            'crs': crs,
-            'index': 1,
-        })[-1]
+                'height': height,
+                'width': width,
+                'resampling_method': resample_method,
+                'crs': crs,
+                'index': 1,
+            })[-1]
 
         if renamed:
             self.xarray_dataset = self.xarray_dataset.rename(
@@ -579,39 +588,37 @@ class DataAccessor:
             return True
         return False
 
-    def get_data_tables(
+    def _verify_variables(
         self,
-        variables: Optional[List[str]] = None,
-        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
-        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
-        coords_id_column: Optional[str] = None,
-        save_table_dir: Optional[Union[str, Path]] = None,
-        save_table_suffix: Optional[str] = None,
-        save_table_prefix: Optional[str] = None,
-    ) -> Dict[str, pd.DataFrame]:
-
-        # clean variables input
+        variables: Optional[Union[str, List[str]]] = None,
+    ) -> List[str]:
         if variables is None:
-            variables = list(self.xarray_dataset.data_vars)
-        else:
-            cant_add_variables = []
-            data_variables = []
-            for v in variables:
-                if v in list(self.xarray_dataset.data_vars):
-                    data_variables.append(v)
-                else:
-                    cant_add_variables.append(v)
-            variables = list(set(data_variables))
-            if len(cant_add_variables) > 0:
-                warnings.warn(
-                    f'The following requested variables are not in the dataset:'
-                    f' {cant_add_variables}.'
-                )
+            return list(self.xarray_dataset.data_vars)
+        elif isinstance(variables, str):
+            variables = [variables]
 
-        coords_dict = {}
+        # check which variables are available
+        cant_add_variables = []
+        data_variables = []
+        for v in variables:
+            if v in list(self.xarray_dataset.data_vars):
+                data_variables.append(v)
+            else:
+                cant_add_variables.append(v)
+        variables = list(set(data_variables))
+        if len(cant_add_variables) > 0:
+            warnings.warn(
+                f'The following requested variables are not in the dataset:'
+                f' {cant_add_variables}.'
+            )
+        return data_variables
 
-        # get coords input from csv
-        # TODO: this can probably be its own function
+    def _get_coords_df(
+        self,
+        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+        coords_id_column: Optional[str] = None,
+    ) -> pd.DataFrame:
         if csv_of_coords is not None:
             if isinstance(csv_of_coords, str):
                 csv_of_coords = Path(csv_of_coords)
@@ -628,48 +635,131 @@ class DataAccessor:
             if coords_id_column is not None:
                 coords_df.set_index(coords_id_column, inplace=True)
 
-            for i, row in coords_df.iterrows():
-                coords_dict[i] = (row['lat'], row['lon'])
         elif coords is not None:
-            if isinstance(coords, tuple):
-                coords = [coords]
-            for i, coord in enumerate(coords):
-                coords_dict[i] = (coord[0], coord[1])
+            # TODO: build a dataframe
+            raise NotImplementedError
         else:
             raise ValueError(
                 'Must specify either param:coords or param:csv_of_coords'
             )
+        return coords_df
 
-        # re-chunk so that we dont have as much overhead when sampling
-        self.xarray_dataset = self.xarray_dataset.chunk({'time': 500})
+    def _grab_data_to_df(
+        self,
+        arg_dict: DataGrabberDict,
+    ) -> pd.DataFrame:
+        """Used to batch data fetching to avoid memory overflow"""
+        point_values = {}
+        point_values['datetime'] = arg_dict['point_data'].time.values
 
-        # extract data and build pandas dataframes, add to out_dfs_dict
-        # TODO: switch to getting all points at once! Iterating is far too slow.
+        # get values for each point in the batch
+        for i, point_id in enumerate(arg_dict['point_ids']):
+            values = arg_dict['point_data'].isel(
+                {
+                    arg_dict['xy_dims'][0]: arg_dict['nearest_x_idxs'][i],
+                    arg_dict['xy_dims'][-1]: arg_dict['nearest_y_idxs'][i],
+                }
+            ).values
+            point_values[point_id] = np.array(values)
+
+        # convert to dataframe and return
+        return pd.DataFrame().from_dict(point_values).set_index('datetime')
+
+    def get_data_tables(
+        self,
+        variables: Optional[List[str]] = None,
+        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        coords_id_column: Optional[str] = None,
+        xy_columns: Optional[Tuple[str, str]] = None,
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+    ) -> Dict[str, pd.DataFrame]:
+
+        # clean variables input
+        variables = self._verify_variables(variables)
+
+        # get x/y columns
+        if xy_columns is None:
+            xy_columns = ('lon', 'lat')
+        x_col, y_col = xy_columns
+
+        # get coords input from csv
+        coords_df = self._get_coords_df(
+            coords=coords,
+            csv_of_coords=csv_of_coords,
+            coords_id_column=coords_id_column,
+        )
+
+        # get the point x/y values
+        point_xs = coords_df[x_col].values
+        point_ys = coords_df[y_col].values
+        point_ids = [str(i) for i in coords_df.index.values]
+
+        # get dimension names
+        x_dim = self.xarray_dataset.attrs['x_dim']
+        y_dim = self.xarray_dataset.attrs['y_dim']
+
+        # get all coordinates from the dataset
+        ds_xs = self.xarray_dataset[x_dim].values
+        ds_ys = self.xarray_dataset[y_dim].values
+
+        # get nearest lat/longs for each sample point
+        nearest_x_idxs = np.abs(ds_xs - point_xs.reshape(-1, 1)).argmin(axis=1)
+        nearest_y_idxs = np.abs(ds_ys - point_ys.reshape(-1, 1)).argmin(axis=1)
+
         out_dfs_dict = {}
-        for variable in variables:
-            pandas_series = []
-            dt_index = False
-            for id, coord in coords_dict.items():
-                da = self.xarray_dataset.sel(
-                    {
-                        self.xarray_dataset.attrs['y_dim']: coord[0],
-                        self.xarray_dataset.attrs['x_dim']: coord[1],
-                    },
-                    method='nearest',
-                )
-                if not dt_index:
-                    dt_series = pd.Series(
-                        data=da.time.values,
-                        name='datetime',
-                    )
-                    pandas_series.append(dt_series)
-                    dt_index = True
-                pandas_series.append(pd.Series(
-                    data=da[variable].values,
-                    name=str(id),
-                ))
-            out_dfs_dict[variable] = pd.concat(pandas_series, axis=1)
-            out_dfs_dict[variable].set_index('datetime', inplace=True)
+
+        # set up multiprocessing
+        client, as_completed_func = get_multithread(
+            use_dask=self.use_dask,
+            n_workers=(multiprocessing.cpu_count() - 1),
+            processes=True,
+            close_existing_client=True,
+        )
+
+        # get batches of max 500 points to avoid memory overflow
+        batch_size = 100
+        start_stops_idxs = list(range(0, len(point_ids), batch_size))
+
+        with client as executor:
+            for variable in variables:
+                futures = []
+                for i, num in enumerate(start_stops_idxs):
+                    if num != start_stops_idxs[-1]:
+                        stop = start_stops_idxs[i + 1]
+                    else:
+                        stop = None
+
+                    # get a batch of point data
+
+                    arg_dict = {
+                        'nearest_x_idxs': nearest_x_idxs[num:stop],
+                        'nearest_y_idxs': nearest_y_idxs[num:stop],
+                        'point_ids': point_ids[num:stop],
+                        'point_data': self.xarray_dataset.isel(
+                            {
+                                x_dim: nearest_x_idxs[num:stop],
+                                y_dim: nearest_y_idxs[num:stop],
+                            }
+                        )[variable],
+                        'xy_dims': (x_dim, y_dim),
+                    }
+                    # add to executer
+                    futures.append(executor.submit(
+                        self._grab_data_to_df, arg_dict))
+
+                dataframes = []
+                for future in as_completed_func(futures):
+                    try:
+                        dataframes.append(future.result())
+                    except Exception as e:
+                        logging.warning(
+                            f'Exception hit!: {e}'
+                        )
+                out_dfs_dict[variable] = pd.concat(
+                    dataframes, sort=True, copy=False)
 
         # save if necessary
         if save_table_dir:
@@ -677,7 +767,6 @@ class DataAccessor:
                 prefix = ''
             else:
                 prefix = save_table_prefix
-
 
             no_success = False
             if isinstance(save_table_dir, str):
@@ -689,13 +778,15 @@ class DataAccessor:
             if save_table_suffix is None or save_table_suffix == '.parquet':
                 for variable in variables:
                     out_dfs_dict[variable].to_parquet(
-                        Path(save_table_dir / f'{prefix}{variable}.parquet'),
+                        Path(save_table_dir /
+                             f'{prefix}{variable}.parquet'),
                     )
 
             elif save_table_suffix == '.csv':
                 for variable in variables:
                     out_dfs_dict[variable].to_csv(
-                        Path(save_table_dir / f'{prefix}{variable}.parquet'),
+                        Path(save_table_dir /
+                             f'{prefix}{variable}.parquet'),
                     )
             elif save_table_suffix == '.xlsx':
                 for variable in variables:

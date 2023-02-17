@@ -344,7 +344,10 @@ class CDSDataAccessor:
 
         client, as_completed_func = get_multithread(
             use_dask=use_dask,
-            thread_limit=self.thread_limit,
+            n_workers=self.thread_limit,
+            threads_per_worker=1,
+            processes=True,
+            close_existing_client=False,
         )
 
         # make a dictionary to store all data
