@@ -1,4 +1,5 @@
 import xarray as xr
+import rioxarray
 import cdsapi
 import warnings
 import logging

@@ -715,6 +715,7 @@ class DataAccessor:
         client, as_completed_func = get_multithread(
             use_dask=self.use_dask,
             n_workers=(multiprocessing.cpu_count() - 1),
+            threads_per_worker=None,
             processes=True,
             close_existing_client=True,
         )
@@ -759,7 +760,15 @@ class DataAccessor:
                             f'Exception hit!: {e}'
                         )
                 out_dfs_dict[variable] = pd.concat(
-                    dataframes, sort=True, copy=False)
+                    dataframes,
+                    sort=True,
+                    copy=False,
+                )
+
+                # sort columns
+                out_dfs_dict[variable] = out_dfs_dict[variable].reindex(
+                    columns=point_ids,
+                )
 
         # save if necessary
         if save_table_dir:
