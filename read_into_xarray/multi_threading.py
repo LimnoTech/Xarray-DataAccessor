@@ -42,7 +42,7 @@ class DaskClass:
 
             DaskClass.dask_classes.append(self)
         print(
-            f'Dask dashboard URL: {self.dashboard_url}'
+            f'Dask dashboard URL: {self.client.scheduler_info()}'
         )
 
 
