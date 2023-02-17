@@ -640,7 +640,11 @@ class DataAccessor:
                 'Must specify either param:coords or param:csv_of_coords'
             )
 
+        # re-chunk so that we dont have as much overhead when sampling
+        self.xarray_dataset = self.xarray_dataset.chunk({'time': 500})
+
         # extract data and build pandas dataframes, add to out_dfs_dict
+        # TODO: switch to getting all points at once! Iterating is far too slow.
         out_dfs_dict = {}
         for variable in variables:
             pandas_series = []
