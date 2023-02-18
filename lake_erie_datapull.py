@@ -4,6 +4,10 @@ from pathlib import Path
 import pandas as pd
 import gc
 import logging
+logging.basicConfig(
+    filename='Lake_Erie_data_pull.log',
+    level=logging.INFO,
+)
 
 LAKE_ERIE_DIR = Path(Path.cwd() / 'lake_erie_data/')
 AOI_SHP = Path(LAKE_ERIE_DIR / 'LEEM_boundary.shp')
@@ -111,5 +115,6 @@ def main():
                 gc.collect()
 
 
+logging.shutdown()
 if __name__ == '__main__':
     main()

@@ -682,13 +682,13 @@ class DataAccessor:
         if save_table_suffix is None or save_table_suffix == '.parquet':
             df.to_parquet(
                 Path(save_table_dir /
-                        f'{prefix}{variable}.parquet'),
+                     f'{prefix}{variable}.parquet'),
             )
 
         elif save_table_suffix == '.csv':
             df.to_csv(
                 Path(save_table_dir /
-                        f'{prefix}{variable}.parquet'),
+                     f'{prefix}{variable}.parquet'),
             )
         elif save_table_suffix == '.xlsx':
             df.to_excel(
@@ -750,7 +750,7 @@ class DataAccessor:
 
         # get a dict with point IDs as keys, and nearest x/y indices as values
         points_nearest_xy_idxs = dict(zip(
-            point_ids, 
+            point_ids,
             zip(nearest_x_idxs, nearest_y_idxs)
         ))
 
@@ -759,7 +759,8 @@ class DataAccessor:
 
         # get batches of max 100 points to avoid memory overflow
         batch_size = 50
-        start_stops_idxs = list(range(0, len(points_nearest_xy_idxs.keys()) + 1, batch_size))
+        start_stops_idxs = list(
+            range(0, len(points_nearest_xy_idxs.keys()) + 1, batch_size))
 
         # start multiprocessing
         client, as_completed_func = get_multithread(
@@ -791,10 +792,11 @@ class DataAccessor:
                         stop = start_stops_idxs[i + 1]
                     else:
                         stop = None
-
+                    logging.info(f'Processing [{num}:{stop}]')
                     # get a batch of point data
                     input = list(zip(
-                        [variable for p in list(points_nearest_xy_idxs.items())[num:stop]],
+                        [variable for p in list(points_nearest_xy_idxs.items())[
+                            num:stop]],
                         list(points_nearest_xy_idxs.items())[num:stop]
                     ))
                     futures = executer.map(
