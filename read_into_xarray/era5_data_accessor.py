@@ -265,10 +265,6 @@ class CDSDataAccessor:
             months = self._get_months_list(s_dt, e_dt)
 
             for month in months:
-                time_dict = {}
-                time_dict['year'] = [year]
-                time_dict['month'] = [month]
-
                 if start_dt.year == int(year) and start_dt.month == int(month):
                     s_dt = start_dt
                 else:
@@ -281,8 +277,27 @@ class CDSDataAccessor:
                             f'{int(month) + 1}/1/{year}') - timedelta(days=1)
                     )
 
-                time_dict['day'] = self._get_days_list(s_dt, e_dt)
-                time_dicts.append(time_dict)
+                days = self._get_days_list(s_dt, e_dt)
+
+                # get weekly chunks of days for API calls
+                days_lists = []
+                sub_days = []
+                for day in days:
+                    if len(sub_days) < 7:
+                        sub_days.append(day)
+                    else:
+                        days_lists.append(sub_days)
+                        sub_days = []
+                if len(sub_days) > 0:
+                    days_lists[-1].extend(sub_days)
+
+                # add to list of dictionaries
+                for day_list in days_lists:
+                    time_dict = {}
+                    time_dict['year'] = [year]
+                    time_dict['month'] = [month]
+                    time_dict['day'] = day_list
+                    time_dicts.append(time_dict)
 
         # add hours if necessary to each time dict
         if hours_step is not None or specific_hours is not None:
