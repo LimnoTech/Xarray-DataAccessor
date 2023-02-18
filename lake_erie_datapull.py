@@ -44,19 +44,31 @@ CSVS = [
 ]
 OUT_DIRS = [ELEMENTS_DIR, NODES_DIR]
 MONTH_CHUNKS = {
-    'jan_thru_mar': ('1/01', '3/31'), 
-    'apr_thru_jun': ('4/01', '6/30'),
-    'jul_thru_sep': ('7/01', '9/30'),
-    'oct_thru_dec': ('10/01', '12/31'),
+    'jan': ('1/01', '1/31'),
+    'feb': ('2/01', '2/28'),
+    'mar': ('3/01', '3/31'),
+    'apr': ('4/01', '4/30'),
+    'may': ('5/01', '5/31'),
+    'jun': ('6/01', '6/30'),
+    'jul': ('7/01', '7/31'),
+    'aug': ('8/01', '8/31'),
+    'sep': ('9/01', '9/30'),
+    'oct': ('10/01', '10/31'),
+    'nov': ('11/01', '11/30'),
+    'dec': ('12/01', '12/31'),
+
 }
 
 # get data for a year at a time to avoid killing our memory
+
+
 def main():
     for i, var_list in enumerate([ELEMENT_VARS, NODES_VARS]):
         logging.info(f'Getting data for {var_list}')
         for year in range(2011, 2022):
             for name, months_chunk in MONTH_CHUNKS.items():
-                logging.info(f'Getting data for year={year}, month range={name}')
+                logging.info(
+                    f'Getting data for year={year}, month range={name}')
                 start_time = f'{months_chunk[0]}/{year}'
                 end_time = f'{months_chunk[1]}/{year}'
 
@@ -97,5 +109,7 @@ def main():
                 # delete the data accessor and clear memory
                 del data_accessor
                 gc.collect()
+
+
 if __name__ == '__main__':
     main()
