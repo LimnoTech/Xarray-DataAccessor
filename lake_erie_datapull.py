@@ -92,7 +92,7 @@ def main():
                 # get the data
                 logging.info(f'Getting and resampling data')
                 data_accessor.get_data(
-                    resolution_factor=15,
+                    resolution_factor=100,
                     #chunk_dict={'time': 5},
                 )
 

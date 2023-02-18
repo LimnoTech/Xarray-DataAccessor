@@ -441,7 +441,11 @@ class DataAccessor:
         height = int(len(self.xarray_dataset.y) * xy_resolution_factors[1])
         crs = self.xarray_dataset.rio.crs
         self.xarray_dataset = self.xarray_dataset.chunk(
-            {'time': 5, 'x': 100, 'y': 100},
+            {'time': 1, 'x': 100, 'y': 100},
+        )
+
+        logging.info(
+            f'Resampling to height={height}, width={width}. dateime={datetime.now()}'
         )
         self.xarray_dataset = self._resample_slice(
             data=self.xarray_dataset,
@@ -452,11 +456,13 @@ class DataAccessor:
                 'crs': crs,
                 'index': 1,
             })[-1]
-
+        
         if renamed:
             self.xarray_dataset = self.xarray_dataset.rename(
                 {'x': x_dim, 'y': y_dim}
             )
+        logging.info(f'Resampling complete: datetime={datetime.now()}')
+        logging.info(f'Resampled dataset info: {self.xarray_dataset.dims}')
         return self.xarray_dataset
 
     def get_data(
@@ -768,7 +774,7 @@ class DataAccessor:
         del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
 
         # get batches of max 100 points to avoid memory overflow
-        batch_size = 500
+        batch_size = 1000
         start_stops_idxs = list(
             range(0, len(points_nearest_xy_idxs.keys()) + 1, batch_size))
 
@@ -811,6 +817,7 @@ class DataAccessor:
                     #))
 
                     # v2 implementation, select first, load to its own dataarray
+                    logging.info(f'Slicing. Datetime={datetime.now()}')
                     input = []
                     for p, xy in list(points_nearest_xy_idxs.items())[num:stop]:
                         input.append((p, self.xarray_dataset.isel(
@@ -821,12 +828,14 @@ class DataAccessor:
                         )[variable].load()
                         ))
 
+                    logging.info(f'Scattering. Datetime={datetime.now()}')
                     try:
                         input = executer.scatter(input)
                     except Exception:
                         logging.info('Failed to scatter input')
                         pass
-
+                    
+                    logging.info(f'Multiprocessing. Datetime={datetime.now()}')
                     # run the inputs in parallel
                     futures = executer.map(
                         self._grab_data_to_df_v2,
