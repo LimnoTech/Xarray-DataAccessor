@@ -55,8 +55,6 @@ class ResampleDict(TypedDict):
 
 class DataGrabberDict(TypedDict):
     point_data: xr.Dataset
-    nearest_x_idxs: np.array
-    nearest_y_idxs: np.array
     point_ids: List[str]
     xy_dims: Tuple[str, str]
 
@@ -646,24 +644,19 @@ class DataAccessor:
 
     def _grab_data_to_df(
         self,
-        arg_dict: DataGrabberDict,
-    ) -> pd.DataFrame:
+        variable: str,
+        point_xy_idxs: Tuple[str, Tuple[int, int]],
+    ) -> pd.Series:
         """Used to batch data fetching to avoid memory overflow"""
-        point_values = {}
-        point_values['datetime'] = arg_dict['point_data'].time.values
-
-        # get values for each point in the batch
-        for i, point_id in enumerate(arg_dict['point_ids']):
-            values = arg_dict['point_data'].isel(
+        return pd.Series(
+            data=self.xarray_dataset.isel(
                 {
-                    arg_dict['xy_dims'][0]: arg_dict['nearest_x_idxs'][i],
-                    arg_dict['xy_dims'][-1]: arg_dict['nearest_y_idxs'][i],
-                }
-            ).values
-            point_values[point_id] = np.array(values)
-
-        # convert to dataframe and return
-        return pd.DataFrame().from_dict(point_values).set_index('datetime')
+                    self.xarray_dataset.attrs['x_dim']: point_xy_idxs[-1][0],
+                    self.xarray_dataset.attrs['y_dim']: point_xy_idxs[-1][1],
+                },
+            )[variable].load().values,
+            name=point_xy_idxs[0],
+        )
 
     def _save_dataframe(
         self,
@@ -755,35 +748,39 @@ class DataAccessor:
         nearest_x_idxs = np.abs(ds_xs - point_xs.reshape(-1, 1)).argmin(axis=1)
         nearest_y_idxs = np.abs(ds_ys - point_ys.reshape(-1, 1)).argmin(axis=1)
 
-        out_dfs_dict = {}
+        # get a dict with point IDs as keys, and nearest x/y indices as values
+        points_nearest_xy_idxs = dict(zip(
+            point_ids, 
+            zip(nearest_x_idxs, nearest_y_idxs)
+        ))
 
-        # set up multiprocessing
-        client, as_completed_func = get_multithread(
-            use_dask=self.use_dask,
-            n_workers=(multiprocessing.cpu_count() - 1),
-            threads_per_worker=1,
-            processes=True,
-            close_existing_client=True,
-        )
+        # clear some memory
+        del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
 
         # get batches of max 100 points to avoid memory overflow
         batch_size = 100
         start_stops_idxs = list(range(0, len(point_ids) + 1, batch_size))
 
-        # get number of futures to process in batches
-        procces_at_idxs = list(range(0, len(start_stops_idxs), 100))
-        if len(procces_at_idxs) == 1:
-            procces_at_idxs.append(int(len(start_stops_idxs) - 1))
-        procces_at_idxs.reverse()
-        procces_at_idxs.pop()
+        # start multiprocessing
+        client, as_completed_func = get_multithread(
+            use_dask=self.use_dask,
+            n_workers=int(multiprocessing.cpu_count() - 1),
+            threads_per_worker=1,
+            processes=True,
+            close_existing_client=True,
+        )
 
-        with client as executor:
+        with client as executer:
             for variable in variables:
                 logging.info(f'Saving {variable} data to {save_table_dir}')
-
                 # store the futures and dataframe
-                futures = []
-                dataframes = []
+                pandas_series = []
+                pandas_series.append(
+                    pd.Series(
+                        data=self.xarray_dataset[variable].time.values,
+                        name='datetime',
+                    ),
+                )
                 for i, num in enumerate(start_stops_idxs):
                     if num != start_stops_idxs[-1]:
                         stop = start_stops_idxs[i + 1]
@@ -791,48 +788,26 @@ class DataAccessor:
                         stop = None
 
                     # get a batch of point data
-                    arg_dict = {
-                        'nearest_x_idxs': nearest_x_idxs[num:stop],
-                        'nearest_y_idxs': nearest_y_idxs[num:stop],
-                        'point_ids': point_ids[num:stop],
-                        'point_data': self.xarray_dataset.isel(
-                            {
-                                x_dim: nearest_x_idxs[num:stop],
-                                y_dim: nearest_y_idxs[num:stop],
-                            }
-                        )[variable],
-                        'xy_dims': (x_dim, y_dim),
-                    }
-                    # add the batch to the executer
-                    try:
-                        arg_dict = executor.scatter(arg_dict)
-                    except Exception:
-                        pass
-                    futures.append(executor.submit(
-                        self._grab_data_to_df, arg_dict))
+                    futures = executer.map(
+                        self._grab_data_to_df,
+                        variable,
+                        points_nearest_xy_idxs.items()[num:stop],
+                    )
 
-                    # get results from the futures for the batch
-                    if i in procces_at_idxs or i == int(len(start_stops_idxs) - 1):
-                        logging.info(f'Creating dataframe for {len(futures)} data batches')
-                        for future in as_completed_func(futures):
-                            try:
-                                dataframes.append(future.result())
-                            except Exception as e:
-                                logging.warning(
-                                    f'Exception hit!: {e}'
-                                )
-                        del futures
-                        futures = []
-                        
+                    # get the series back for the batch of points
+                    for future in as_completed_func(futures):
+                        pandas_series.append(future)
+
                 df = pd.concat(
-                    dataframes,
-                    sort=True,
+                    pandas_series,
+                    axis=1,
                     copy=False,
-                )
+                ).set_index('datetime')
+                df.sort_index(inplace=True)
 
                 # sort columns
                 df = df.reindex(
-                    columns=point_ids,
+                    columns=list(points_nearest_xy_idxs.keys()),
                 )
 
                 # save to file
