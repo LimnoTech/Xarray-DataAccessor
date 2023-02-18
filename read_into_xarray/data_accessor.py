@@ -770,6 +770,11 @@ class DataAccessor:
             close_existing_client=True,
         )
 
+        # prep chunks
+        self.xarray_dataset = self.xarray_dataset.chunk(
+            {'time': 10000, x_dim: 5, y_dim: 5}
+        )
+
         with client as executer:
             for variable in variables:
                 logging.info(f'Saving {variable} data to {save_table_dir}')
@@ -797,6 +802,7 @@ class DataAccessor:
                     # get the series back for the batch of points
                     for future in as_completed_func(futures):
                         pandas_series.append(future)
+                    del futures
 
                 df = pd.concat(
                     pandas_series,
