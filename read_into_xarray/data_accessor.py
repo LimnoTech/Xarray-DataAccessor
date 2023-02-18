@@ -644,18 +644,18 @@ class DataAccessor:
 
     def _grab_data_to_df(
         self,
-        variable: str,
-        point_xy_idxs: Tuple[str, Tuple[int, int]],
+        input: Tuple[str, Tuple[str, Tuple[int, int]]],
     ) -> pd.Series:
         """Used to batch data fetching to avoid memory overflow"""
+        logging.info(f'Var={input[0]}, point={input[-1][0]}')
         return pd.Series(
             data=self.xarray_dataset.isel(
                 {
-                    self.xarray_dataset.attrs['x_dim']: point_xy_idxs[-1][0],
-                    self.xarray_dataset.attrs['y_dim']: point_xy_idxs[-1][1],
+                    self.xarray_dataset.attrs['x_dim']: input[-1][-1][0],
+                    self.xarray_dataset.attrs['y_dim']: input[-1][-1][1],
                 },
-            )[variable].load().values,
-            name=point_xy_idxs[0],
+            )[input[0]].load().values,
+            name=input[-1][0],
         )
 
     def _save_dataframe(
@@ -758,7 +758,7 @@ class DataAccessor:
         del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
 
         # get batches of max 100 points to avoid memory overflow
-        batch_size = 100
+        batch_size = 50
         start_stops_idxs = list(range(0, len(points_nearest_xy_idxs.keys()) + 1, batch_size))
 
         # start multiprocessing
@@ -793,15 +793,18 @@ class DataAccessor:
                         stop = None
 
                     # get a batch of point data
+                    input = list(zip(
+                        [variable for p in list(points_nearest_xy_idxs.items())[num:stop]],
+                        list(points_nearest_xy_idxs.items())[num:stop]
+                    ))
                     futures = executer.map(
                         self._grab_data_to_df,
-                        variable,
-                        list(points_nearest_xy_idxs.items())[num:stop],
+                        input,
                     )
 
                     # get the series back for the batch of points
                     for future in as_completed_func(futures):
-                        pandas_series.append(future)
+                        pandas_series.append(future.result())
                     del futures
 
                 df = pd.concat(
