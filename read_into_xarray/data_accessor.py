@@ -1,7 +1,6 @@
 import warnings
 import logging
 import multiprocessing
-import gc
 from read_into_xarray.multi_threading import get_multithread
 from pathlib import Path
 from datetime import datetime
@@ -648,24 +647,9 @@ class DataAccessor:
             )
         return coords_df
 
-    def _grab_data_to_df(
-        self,
-        input: Tuple[str, Tuple[str, Tuple[int, int]]],
-    ) -> pd.Series:
-        """Used to batch data fetching to avoid memory overflow"""
-        logging.info(f'Var={input[0]}, point={input[-1][0]}')
-        return pd.Series(
-            data=self.xarray_dataset.isel(
-                {
-                    self.xarray_dataset.attrs['x_dim']: input[-1][-1][0],
-                    self.xarray_dataset.attrs['y_dim']: input[-1][-1][1],
-                },
-            )[input[0]].load().values,
-            name=input[-1][0],
-        )
 
     @staticmethod
-    def _grab_data_to_df_v2(
+    def _grab_data_to_df(
         input: Tuple[str, xr.DataArray]
     ) -> pd.Series:
         """Testing performance of slicing first and extracting values in parallel"""
@@ -789,7 +773,7 @@ class DataAccessor:
 
         # prep chunks
         self.xarray_dataset = self.xarray_dataset.chunk(
-            {'time': 10000, x_dim: 5, y_dim: 5}
+            {'time': 10000, x_dim: 10, y_dim: 10}
         )
 
         with client as executer:
@@ -809,12 +793,6 @@ class DataAccessor:
                     else:
                         stop = None
                     logging.info(f'Processing [{num}:{stop}]. datetime={datetime.now()}')
-                    # get a batch of point data - v1 impementation
-                    #input = list(zip(
-                    #    [variable for p in list(points_nearest_xy_idxs.items())[
-                    #        num:stop]],
-                    #    list(points_nearest_xy_idxs.items())[num:stop]
-                    #))
 
                     # v2 implementation, select first, load to its own dataarray
                     logging.info(f'Slicing. Datetime={datetime.now()}')
@@ -838,7 +816,7 @@ class DataAccessor:
                     logging.info(f'Multiprocessing. Datetime={datetime.now()}')
                     # run the inputs in parallel
                     futures = executer.map(
-                        self._grab_data_to_df_v2,
+                        self._grab_data_to_df,
                         input,
                     )
 
@@ -861,6 +839,7 @@ class DataAccessor:
                 )
 
                 # save to file
+                logging.info(f'Saving dataframe, datetime={datetime.now()}')
                 self._save_dataframe(
                     df,
                     variable=variable,

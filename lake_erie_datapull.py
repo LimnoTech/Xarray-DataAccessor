@@ -93,7 +93,6 @@ def main():
                 logging.info(f'Getting and resampling data')
                 data_accessor.get_data(
                     resolution_factor=100,
-                    #chunk_dict={'time': 5},
                 )
 
                 # convert data_to_table
