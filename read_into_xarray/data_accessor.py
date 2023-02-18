@@ -665,6 +665,52 @@ class DataAccessor:
         # convert to dataframe and return
         return pd.DataFrame().from_dict(point_values).set_index('datetime')
 
+    def _save_dataframe(
+        self,
+        df: pd.DataFrame,
+        variable: str,
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+    ) -> None:
+        # save if necessary
+        if not save_table_prefix:
+            prefix = ''
+        else:
+            prefix = save_table_prefix
+
+        no_success = False
+        if isinstance(save_table_dir, str):
+            save_table_dir = Path(save_table_dir)
+        if not save_table_dir.exists():
+            warnings.warn(
+                f'Output directory {save_table_dir} does not exist!'
+            )
+        if save_table_suffix is None or save_table_suffix == '.parquet':
+            df.to_parquet(
+                Path(save_table_dir /
+                        f'{prefix}{variable}.parquet'),
+            )
+
+        elif save_table_suffix == '.csv':
+            df.to_csv(
+                Path(save_table_dir /
+                        f'{prefix}{variable}.parquet'),
+            )
+        elif save_table_suffix == '.xlsx':
+            df.to_excel(
+                Path(save_table_dir / f'{prefix}{variable}.xlsx'),
+            )
+        else:
+            warnings.warn(
+                f'{save_table_suffix} is not a valid table format!'
+            )
+            no_success = True
+        if not no_success:
+            logging.info(
+                f'Data for variable={variable} saved @ {save_table_dir}'
+            )
+
     def get_data_tables(
         self,
         variables: Optional[List[str]] = None,
@@ -715,18 +761,29 @@ class DataAccessor:
         client, as_completed_func = get_multithread(
             use_dask=self.use_dask,
             n_workers=(multiprocessing.cpu_count() - 1),
-            threads_per_worker=None,
+            threads_per_worker=1,
             processes=True,
             close_existing_client=True,
         )
 
-        # get batches of max 500 points to avoid memory overflow
+        # get batches of max 100 points to avoid memory overflow
         batch_size = 100
-        start_stops_idxs = list(range(0, len(point_ids), batch_size))
+        start_stops_idxs = list(range(0, len(point_ids) + 1, batch_size))
+
+        # get number of futures to process in batches
+        procces_at_idxs = list(range(0, len(start_stops_idxs), 100))
+        if len(procces_at_idxs) == 1:
+            procces_at_idxs.append(int(len(start_stops_idxs) - 1))
+        procces_at_idxs.reverse()
+        procces_at_idxs.pop()
 
         with client as executor:
             for variable in variables:
+                logging.info(f'Saving {variable} data to {save_table_dir}')
+
+                # store the futures and dataframe
                 futures = []
+                dataframes = []
                 for i, num in enumerate(start_stops_idxs):
                     if num != start_stops_idxs[-1]:
                         stop = start_stops_idxs[i + 1]
@@ -734,7 +791,6 @@ class DataAccessor:
                         stop = None
 
                     # get a batch of point data
-
                     arg_dict = {
                         'nearest_x_idxs': nearest_x_idxs[num:stop],
                         'nearest_y_idxs': nearest_y_idxs[num:stop],
@@ -747,68 +803,43 @@ class DataAccessor:
                         )[variable],
                         'xy_dims': (x_dim, y_dim),
                     }
-                    # add to executer
+                    # add the batch to the executer
+                    try:
+                        arg_dict = executor.scatter(arg_dict)
+                    except Exception:
+                        pass
                     futures.append(executor.submit(
                         self._grab_data_to_df, arg_dict))
 
-                dataframes = []
-                for future in as_completed_func(futures):
-                    try:
-                        dataframes.append(future.result())
-                    except Exception as e:
-                        logging.warning(
-                            f'Exception hit!: {e}'
-                        )
-                out_dfs_dict[variable] = pd.concat(
+                    # get results from the futures for the batch
+                    if i in procces_at_idxs or i == int(len(start_stops_idxs) - 1):
+                        logging.info(f'Creating dataframe for {len(futures)} data batches')
+                        for future in as_completed_func(futures):
+                            try:
+                                dataframes.append(future.result())
+                            except Exception as e:
+                                logging.warning(
+                                    f'Exception hit!: {e}'
+                                )
+                        del futures
+                        futures = []
+                        
+                df = pd.concat(
                     dataframes,
                     sort=True,
                     copy=False,
                 )
 
                 # sort columns
-                out_dfs_dict[variable] = out_dfs_dict[variable].reindex(
+                df = df.reindex(
                     columns=point_ids,
                 )
 
-        # save if necessary
-        if save_table_dir:
-            if not save_table_prefix:
-                prefix = ''
-            else:
-                prefix = save_table_prefix
-
-            no_success = False
-            if isinstance(save_table_dir, str):
-                save_table_dir = Path(save_table_dir)
-            if not save_table_dir.exists():
-                warnings.warn(
-                    f'Output directory {save_table_dir} does not exist!'
+                # save to file
+                self._save_dataframe(
+                    df,
+                    variable=variable,
+                    save_table_dir=save_table_dir,
+                    save_table_suffix=save_table_suffix,
+                    save_table_prefix=save_table_prefix,
                 )
-            if save_table_suffix is None or save_table_suffix == '.parquet':
-                for variable in variables:
-                    out_dfs_dict[variable].to_parquet(
-                        Path(save_table_dir /
-                             f'{prefix}{variable}.parquet'),
-                    )
-
-            elif save_table_suffix == '.csv':
-                for variable in variables:
-                    out_dfs_dict[variable].to_csv(
-                        Path(save_table_dir /
-                             f'{prefix}{variable}.parquet'),
-                    )
-            elif save_table_suffix == '.xlsx':
-                for variable in variables:
-                    out_dfs_dict[variable].to_excel(
-                        Path(save_table_dir / f'{prefix}{variable}.xlsx'),
-                    )
-            else:
-                warnings.warn(
-                    f'{save_table_suffix} is not a valid table format!'
-                )
-                no_success = True
-            if not no_success:
-                logging.info(
-                    f'Data for variables={variables} saved @ {save_table_dir}'
-                )
-        return out_dfs_dict

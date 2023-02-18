@@ -1,7 +1,9 @@
 import read_into_xarray
 from read_into_xarray import DataAccessor
 from pathlib import Path
+import pandas as pd
 import gc
+import logging
 
 LAKE_ERIE_DIR = Path(Path.cwd() / 'lake_erie_data/')
 AOI_SHP = Path(LAKE_ERIE_DIR / 'LEEM_boundary.shp')
@@ -41,47 +43,59 @@ CSVS = [
     Path(LAKE_ERIE_DIR / 'node_latlongs.csv'),
 ]
 OUT_DIRS = [ELEMENTS_DIR, NODES_DIR]
-MONTH_CHUNKS = ['jan_thru_june', 'july_thru_dec']
+MONTH_CHUNKS = {
+    'jan_thru_mar': ('1/01', '3/31'), 
+    'apr_thru_jun': ('4/01', '6/30'),
+    'jul_thru_sep': ('7/01', '9/30'),
+    'oct_thru_dec': ('10/01', '12/31'),
+}
 
 # get data for a year at a time to avoid killing our memory
-for i, var_list in enumerate([ELEMENT_VARS, NODES_VARS]):
-    for year in range(2011, 2022):
-        for j, months_chunk in enumerate([('1/01', '6/30'), ('7/01', '12/31')]):
-            start_time = f'{months_chunk[0]}/{year}'
-            end_time = f'{months_chunk[1]}/{year}'
+def main():
+    for i, var_list in enumerate([ELEMENT_VARS, NODES_VARS]):
+        logging.info(f'Getting data for {var_list}')
+        for year in range(2011, 2022):
+            for name, months_chunk in MONTH_CHUNKS.items():
+                logging.info(f'Getting data for year={year}, month range={name}')
+                start_time = f'{months_chunk[0]}/{year}'
+                end_time = f'{months_chunk[1]}/{year}'
 
-            # init our data accessor
-            data_accessor = DataAccessor(
-                dataset_name=DATASET_NAME,
-                variables=var_list,
-                start_time=start_time,
-                end_time=end_time,
-                coordinates=None,
-                csv_of_coords=None,
-                shapefile=AOI_SHP,
-                raster=None,
-                multithread=True,
-            )
+                # init our data accessor
+                data_accessor = DataAccessor(
+                    dataset_name=DATASET_NAME,
+                    variables=var_list,
+                    start_time=start_time,
+                    end_time=end_time,
+                    coordinates=None,
+                    csv_of_coords=None,
+                    shapefile=AOI_SHP,
+                    raster=None,
+                    multithread=True,
+                )
 
-            # get the data
-            data_accessor.get_data(
-                resolution_factor=20,
-                chunk_dict={'time': 5},
-            )
+                # get the data
+                logging.info(f'Getting and resampling data')
+                data_accessor.get_data(
+                    resolution_factor=10,
+                    chunk_dict={'time': 5},
+                )
 
-            # convert data_to_table for NODES
-            prefix = f'{MONTH_CHUNKS[j]}_{year}_'
-            data_accessor.get_data_tables(
-                variables=var_list,
-                csv_of_coords=CSVS[i],
-                coords_id_column=COL_IDS[i],
-                save_table_dir=OUT_DIRS[i],
-                save_table_prefix=prefix,
-            )
+                # convert data_to_table
+                logging.info('Saving data to .parquet')
+                prefix = f'{name}_{year}_'
+                data_accessor.get_data_tables(
+                    variables=var_list,
+                    csv_of_coords=pd.read_csv(CSVS[i]).loc[:100],
+                    coords_id_column=COL_IDS[i],
+                    save_table_dir=OUT_DIRS[i],
+                    save_table_prefix=prefix,
+                )
 
-            # remove temp files
-            data_accessor.unlock_and_clean()
+                # remove temp files
+                data_accessor.unlock_and_clean()
 
-            # delete the data accessor and clear memory
-            del data_accessor
-            gc.collect()
+                # delete the data accessor and clear memory
+                del data_accessor
+                gc.collect()
+if __name__ == '__main__':
+    main()
