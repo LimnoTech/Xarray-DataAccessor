@@ -19,6 +19,7 @@ dependencies:
   - s3fs
   - h5netcdf
   - cfgrib
+  - eccodes
   - pyarrow
 
   # Interactivity & Visualization (optional, but required for viz)
