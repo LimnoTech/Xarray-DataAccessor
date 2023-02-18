@@ -92,8 +92,8 @@ def main():
                 # get the data
                 logging.info(f'Getting and resampling data')
                 data_accessor.get_data(
-                    resolution_factor=10,
-                    chunk_dict={'time': 5},
+                    resolution_factor=15,
+                    #chunk_dict={'time': 5},
                 )
 
                 # convert data_to_table
@@ -101,7 +101,7 @@ def main():
                 prefix = f'{name}_{year}_'
                 data_accessor.get_data_tables(
                     variables=var_list,
-                    csv_of_coords=pd.read_csv(CSVS[i]).loc[:100],
+                    csv_of_coords=pd.read_csv(CSVS[i]),
                     coords_id_column=COL_IDS[i],
                     save_table_dir=OUT_DIRS[i],
                     save_table_prefix=prefix,
