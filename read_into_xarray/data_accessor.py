@@ -759,7 +759,7 @@ class DataAccessor:
 
         # get batches of max 100 points to avoid memory overflow
         batch_size = 100
-        start_stops_idxs = list(range(0, len(point_ids) + 1, batch_size))
+        start_stops_idxs = list(range(0, len(points_nearest_xy_idxs.keys()) + 1, batch_size))
 
         # start multiprocessing
         client, as_completed_func = get_multithread(
@@ -791,7 +791,7 @@ class DataAccessor:
                     futures = executer.map(
                         self._grab_data_to_df,
                         variable,
-                        points_nearest_xy_idxs.items()[num:stop],
+                        list(points_nearest_xy_idxs.items())[num:stop],
                     )
 
                     # get the series back for the batch of points
