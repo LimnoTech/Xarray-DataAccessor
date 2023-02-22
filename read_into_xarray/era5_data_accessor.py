@@ -1,14 +1,13 @@
-import xarray as xr
-import rioxarray
-import cdsapi
-import warnings
-import logging
-import multiprocessing
-import pandas as pd
-import tempfile
-from pathlib import Path
-from datetime import datetime, timedelta
-from urllib.request import urlopen
+from read_into_xarray.data_accessor import BoundingBoxDict
+from read_into_xarray.multi_threading import DaskClass, get_multithread
+from typing import (
+    Dict,
+    Tuple,
+    List,
+    Union,
+    Optional,
+    TypedDict,
+)
 from read_into_xarray.era5_datasets_info import (
     verify_dataset,
     DATASET_NAMES,
@@ -19,22 +18,32 @@ from read_into_xarray.era5_datasets_info import (
     PRESSURE_LEVEL_VARIABLES,
     ERA5_LAND_VARIABLES,
 )
-from typing import (
-    Dict,
-    Tuple,
-    List,
-    Union,
-    Optional,
-)
-from read_into_xarray.multi_threading import DaskClass, get_multithread
-from read_into_xarray.data_accessor import BoundingBoxDict
-"""
-THIS IS THE MOVE: https://cds.climate.copernicus.eu/toolbox/doc/api.html
-NOTE: Data is accessed for the whole globe, then cropped on their end.
-    Therefore timesteps x variables are the main rate limiting step.
-Live CDS API: https://cds.climate.copernicus.eu/live/limits
-"""
-# TODO: Use dask to parallelize API calls? use dask compute
+import fsspec
+from urllib.request import urlopen
+from datetime import datetime, timedelta
+from pathlib import Path
+import tempfile
+import pandas as pd
+import multiprocessing
+import logging
+import warnings
+import rioxarray
+
+# stop xarray from importing cfgrib by default since it only works well with linux
+import xarray as xr
+import os
+os.environ["XARRAY_GH_CONFIGURE_WITH_CFGRIB"] = "0"
+
+
+class AWSRequestDict(TypedDict):
+    variable: str
+    aws_endpoint: str
+    index: int
+    bbox: BoundingBoxDict
+
+
+class AWSResponseDict(AWSRequestDict):
+    dataset: xr.Dataset
 
 
 class AWSDataAccessor:
@@ -49,7 +58,6 @@ class AWSDataAccessor:
         self,
         dataset_name: str,
         thread_limit: Optional[int] = None,
-        multithread: bool = True,
     ) -> None:
         # check dataset compatibility
         if dataset_name not in self.supported_datasets:
@@ -71,6 +79,108 @@ class AWSDataAccessor:
             out_list.append(v)
         return out_list
 
+    @staticmethod
+    def _rename_dimensions(dataset: xr.Dataset) -> xr.Dataset:
+        time_dim = [d for d in list(dataset.coords) if 'time' in d]
+        if len(time_dim) > 1:
+            warnings.warn(
+                f'Multiple time dimensions found! {time_dim}. '
+                'Changing the first to time. This may cascade errors.'
+            )
+        rename_dict = {
+            'lon': 'longitude',
+            'lat': 'latitude',
+        }
+        time_dim = time_dim[0]
+        if time_dim != 'time':
+            rename_dict[time_dim] = 'time'
+        return dataset.rename(rename_dict)
+
+    def _get_requests_dicts(
+        self,
+        variables: List[str],
+        start_dt: datetime,
+        end_dt: datetime,
+        bbox: BoundingBoxDict,
+    ) -> List[AWSRequestDict]:
+
+        endpoint_prefix = r's3://era5-pds'
+
+        # init list to store request tuples
+        aws_request_dicts = []
+
+        # iterate over variables and create requests
+        for variable in variables:
+            count = 0
+            if variable in self.aws_variable_mapping.keys():
+                endpoint_suffix = f'{self.aws_variable_mapping[variable]}.nc'
+            elif variable in self.aws_variable_mapping.values():
+                endpoint_suffix = f'{variable}.nc'
+            else:
+                warnings.warn(
+                    message=(
+                        f'Variable={variable} cannot be found for AWS'
+                    ),
+                )
+            for year in range(start_dt.year, end_dt.year + 1):
+                m_i, m_f = 1, 13
+                if year == start_dt.year:
+                    m_i = start_dt.month
+                if year == end_dt.year:
+                    m_f = end_dt.month + 1
+                for m in range(m_i, m_f):
+                    m = str(m).zfill(2)
+                    aws_request_dicts.append(
+                        {
+                            'variable': variable,
+                            'aws_endpoint': f'{endpoint_prefix}/{year}/{m}/data/{endpoint_suffix}',
+                            'index': count,
+                            'bbox': bbox,
+                        }
+                    )
+                    count += 1
+        return aws_request_dicts
+
+    def _get_aws_data(
+        self,
+        aws_request_dict: AWSRequestDict,
+    ) -> AWSResponseDict:
+        # read data from the s3 bucket
+        endpoint = aws_request_dict['aws_endpoint']
+        logging.info(f'Accessing endpoint: {endpoint}')
+        aws_request_dict['dataset'] = xr.open_dataset(
+            fsspec.open(endpoint).open(),
+            engine='h5netcdf',
+        )  # .copy(deep=True)
+
+        # adjust to switch to standard lat/lon
+        aws_request_dict['dataset']['lon'] = aws_request_dict['dataset']['lon'] - 180
+
+        # format then crop
+        aws_request_dict['dataset'].rio.write_crs(
+            'EPSG:4326',
+            inplace=True,
+        )
+        aws_request_dict['dataset'].rio.set_spatial_dims(
+            x_dim='lon',
+            y_dim='lat',
+            inplace=True,
+        )
+        aws_request_dict['dataset'] = aws_request_dict['dataset'].rio.clip_box(
+            minx=aws_request_dict['bbox']['west'],
+            miny=aws_request_dict['bbox']['south'],
+            maxx=aws_request_dict['bbox']['east'],
+            maxy=aws_request_dict['bbox']['north'],
+            crs='EPSG:4326',
+        )
+
+        # rename time dimension if necessary
+        aws_request_dict['dataset'] = self._rename_dimensions(
+            aws_request_dict['dataset'],
+        )
+
+        return aws_request_dict
+
     def get_data(
         self,
         variables: Union[str, List[str]],
@@ -86,8 +196,82 @@ class AWSDataAccessor:
 
         NOTE: AWS multithreading is best handled across months.
         """
-        pass
-        #raise NotImplementedError
+
+        # make a dictionary to store all data
+        all_data_dict = {}
+
+        # get a dictionary to store the AWS requests
+        if isinstance(variables, str):
+            variables = [variables]
+
+        aws_request_dicts = self._get_requests_dicts(
+            variables,
+            start_dt,
+            end_dt,
+            bbox,
+        )
+
+        # set up multithreading client
+        client, as_completed_func = get_multithread(
+            use_dask=False,
+            n_workers=self.thread_limit,
+            threads_per_worker=1,
+            processes=True,
+            close_existing_client=False,
+        )
+
+        # init dictionary to store data sorted by variable
+        data_dicts = {}
+        for variable in variables:
+            data_dicts[variable] = {}
+
+        # init a dictionary to store outputs
+        all_data_dict = {}
+
+        with client as executor:
+            logging.info(
+                f'Reading {len(aws_request_dicts)} data months from S3 bucket.')
+            # map all our input dicts to our data getter function
+            futures = {
+                executor.submit(self._get_aws_data, arg): arg for arg in aws_request_dicts
+            }
+            # add outputs to data_dicts
+            for future in as_completed_func(futures):
+                try:
+                    aws_response_dict = future.result()
+                    var = aws_response_dict['variable']
+                    index = aws_response_dict['index']
+                    ds = aws_response_dict['dataset']
+                    data_dicts[var][index] = ds
+                except Exception as e:
+                    logging.warning(
+                        f'Exception hit!: {e}'
+                    )
+
+        for variable in variables:
+            var_dict = data_dicts[variable]
+
+            # reconstruct each variable into a DataArray
+            keys = list(var_dict.keys())
+            keys.sort()
+            datasets = []
+            for key in keys:
+                datasets.append(var_dict[key])
+
+            # only concat if necessary
+            if len(datasets) > 1:
+                ds = xr.concat(
+                    datasets,
+                    dim='time',
+                )
+            else:
+                ds = datasets[0]
+
+            all_data_dict[variable] = ds.rename(
+                {list(ds.data_vars)[0]: variable},
+            )
+
+        return all_data_dict
 
 
 class CDSDataAccessor:
@@ -104,9 +288,11 @@ class CDSDataAccessor:
         self,
         dataset_name: str,
         thread_limit: Optional[int] = None,
-        multithread: bool = True,
         file_format: Optional[str] = None,
     ) -> None:
+
+        # import the API (done here to avoid multiprocessing imports)
+        import cdsapi
 
         # check dataset compatibility
         if dataset_name not in self.supported_datasets:
@@ -427,9 +613,8 @@ class ERA5DataAccessor:
     def __init__(
         self,
         dataset_name: str,
-        multithread: bool = True,
         use_dask: bool = False,
-        use_cds_only: bool = True,  # TODO: switch back after data pull for Dan
+        use_cds_only: bool = False,
         file_format: str = 'netcdf',
         **kwargs,
     ) -> None:
@@ -442,7 +627,6 @@ class ERA5DataAccessor:
 
         Arguments:
             :param dataset_name: Name of an ERA5 dataset.
-            :param multithread: Whether to multithread data fetching calls.
             :param use_dask: Whether to use dask for multithreading.
             :param dask_client_kwargs: Dask client kwargs for init.
             :param use_cds_only: Controls whether to only use CDSDataAccessor.
@@ -451,7 +635,6 @@ class ERA5DataAccessor:
                 NOTE: This is a kwarg not in DataAccessor.pull_data() arguments.
         """
         # init multithreading
-        self.multithread = multithread
         self.cores = int(multiprocessing.cpu_count())
         self.use_dask = use_dask
 
@@ -463,7 +646,6 @@ class ERA5DataAccessor:
         self.dataset_name = dataset_name
 
         # control multithreading
-        self.multithread = multithread
         self.cores = int(multiprocessing.cpu_count())
 
         # see if we can attempt to use aws
@@ -471,7 +653,6 @@ class ERA5DataAccessor:
         self.cds_data_accessor = CDSDataAccessor(
             dataset_name=self.dataset_name,
             thread_limit=self.cores,
-            multithread=self.multithread,
             file_format=file_format,
         )
         self.all_possible_variables = self.cds_data_accessor.possible_variables()
@@ -481,7 +662,6 @@ class ERA5DataAccessor:
             self.aws_data_accessor = AWSDataAccessor(
                 dataset_name=self.dataset_name,
                 thread_limit=self.cores,
-                multithread=self.multithread,
             )
             self.all_possible_variables = list(
                 set(self.all_possible_variables +
@@ -567,9 +747,9 @@ class ERA5DataAccessor:
                         specific_hours=specific_hours,
                     ),
                 )
-            except TypeError:
+            except TypeError as e:
                 warnings.warn(
-                    f'{accessor.__str__()} returned None'
+                    f'{accessor.__str__()} returned None. Exception: {e}'
                 )
 
         # remove and warn about NoneType responses
@@ -594,6 +774,7 @@ class ERA5DataAccessor:
 
         # combine the data from multiple sources
         try:
+            logging.info('Combining all variable Datasets')
             out_ds = xr.merge(list(datasets_dict.values())).rio.write_crs(4326)
 
             # write attributes
