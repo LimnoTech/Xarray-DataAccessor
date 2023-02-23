@@ -2,6 +2,10 @@ from read_into_xarray import DataAccessor
 import logging
 import gc
 from pathlib import Path
+logging.basicConfig(
+    filename='brazil_data_pull.log',
+    level=logging.INFO,
+)
 
 COORDS = [(-5.141658, -40.916180)]
 START_TIME = '01/01/2017'
@@ -30,46 +34,45 @@ MONTH_CHUNKS = {
 
 def main():
     for year in range(2017, 2023):
-        for name, months_chunk in MONTH_CHUNKS.items():
-            logging.info(
-                f'Getting data for year={year}, month range={name}')
-            start_time = f'{months_chunk[0]}/{year}'
-            end_time = f'{months_chunk[1]}/{year}'
+        logging.info(
+            f'Getting data for year={year}')
+        start_time = f'01/01/{year}'
+        end_time = f'12/31/{year}'
 
-            # init our data accessor
-            data_accessor = DataAccessor(
-                dataset_name='reanalysis-era5-single-levels',
-                variables=VARIABLES,
-                start_time=start_time,
-                end_time=end_time,
-                coordinates=COORDS,
-                csv_of_coords=None,
-                shapefile=None,
-                raster=None,
-                multithread=True,
-            )
+        # init our data accessor
+        data_accessor = DataAccessor(
+            dataset_name='reanalysis-era5-single-levels',
+            variables=VARIABLES,
+            start_time=start_time,
+            end_time=end_time,
+            coordinates=COORDS,
+            csv_of_coords=None,
+            shapefile=None,
+            raster=None,
+            multithread=True,
+        )
 
-            # get the data
-            logging.info(f'Getting and resampling data')
-            data_accessor.get_data()
+        # get the data
+        logging.info(f'Getting and resampling data')
+        data_accessor.get_data()
 
-            # convert data_to_table
-            logging.info('Saving data to .parquet')
-            prefix = f'{name}_{year}_'
-            data_accessor.get_data_tables(
-                variables=VARIABLES,
-                csv_of_coords=Path(BRAZIL_DIR / 'brazil_coords.csv'),
-                coords_id_column='station',
-                save_table_dir=BRAZIL_DIR,
-                save_table_prefix=prefix,
-            )
+        # convert data_to_table
+        logging.info('Saving data to .parquet')
+        prefix = f'{year}_'
+        data_accessor.get_data_tables(
+            variables=VARIABLES,
+            csv_of_coords=Path(BRAZIL_DIR / 'brazil_coords.csv'),
+            coords_id_column='station',
+            save_table_dir=BRAZIL_DIR,
+            save_table_prefix=prefix,
+        )
 
-            # remove temp files
-            data_accessor.unlock_and_clean()
+        # remove temp files
+        data_accessor.unlock_and_clean()
 
-            # delete the data accessor and clear memory
-            del data_accessor
-            gc.collect()
+        # delete the data accessor and clear memory
+        del data_accessor
+        gc.collect()
 
 
 if __name__ == '__main__':
