@@ -141,6 +141,24 @@ class AWSDataAccessor:
                     count += 1
         return aws_request_dicts
 
+    @staticmethod
+    def _crop_aws_data(
+        ds: xr.Dataset,
+        bbox: BoundingBoxDict,
+    ) -> xr.Dataset:
+        """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
+        # find suitable bounds
+
+        return
+        aws_request_dict['dataset'] = aws_request_dict['dataset'].rio.clip_box(
+            minx=aws_request_dict['bbox']['west'],
+            miny=aws_request_dict['bbox']['south'],
+            maxx=aws_request_dict['bbox']['east'],
+            maxy=aws_request_dict['bbox']['north'],
+            crs='EPSG:4326',
+        )
+        pass
+
     def _get_aws_data(
         self,
         aws_request_dict: AWSRequestDict,
@@ -579,17 +597,30 @@ class CDSDataAccessor:
                         }
                     ))
 
-                futures = {
-                    executor.submit(self._get_api_response, arg): arg for arg in input_dicts
-                }
-                for future in as_completed_func(futures):
-                    try:
-                        index, ds = future.result()
-                        var_dict[index] = ds
-                    except Exception as e:
-                        logging.warning(
-                            f'Exception hit!: {e}'
-                        )
+                # only send 10 at once to prevent being throttled
+                batches = list(range((len(input_dicts) // 10) + 1))
+                batches = [b + 1 for b in batches]
+                for j, batch in enumerate(batches):
+                    if j == 0:
+                        start_i = 0
+                    else:
+                        start_i = int(batches[j - 1] * 10)
+                    if batch == batches[-1]:
+                        end_i = None
+                    else:
+                        end_i = int(batch * 10)
+
+                    futures = {
+                        executor.submit(self._get_api_response, arg): arg for arg in input_dicts[start_i:end_i]
+                    }
+                    for future in as_completed_func(futures):
+                        try:
+                            index, ds = future.result()
+                            var_dict[index] = ds
+                        except Exception as e:
+                            logging.warning(
+                                f'Exception hit!: {e}'
+                            )
 
                 # reconstruct each variable into a DataArray
                 keys = list(var_dict.keys())
