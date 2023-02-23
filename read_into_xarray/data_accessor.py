@@ -283,7 +283,27 @@ class DataAccessor:
     ) -> BoundingBoxDict:
         # TODO: add buffer so the edge isn't the exact coordinate?
         # TODO : make method
-        raise NotImplementedError
+        if isinstance(coords, tuple):
+            coords = [coords]
+        north = coords[0][0]
+        south = coords[0][0]
+        east = coords[0][1]
+        west = coords[0][1]
+        for coord in coords:
+            if coord[0] > north:
+                north = coord[0]
+            elif coord[0] < south:
+                south = coord[0]
+            if coord[1] > east:
+                east = coord[1]
+            elif coord[1] < west:
+                west = coord[1]
+        return {
+            'west': west,
+            'south': south,
+            'east': east,
+            'north': north,
+        }
 
     @staticmethod
     def _bbox_from_coords_csv(
@@ -455,7 +475,7 @@ class DataAccessor:
                 'crs': crs,
                 'index': 1,
             })[-1]
-        
+
         if renamed:
             self.xarray_dataset = self.xarray_dataset.rename(
                 {'x': x_dim, 'y': y_dim}
@@ -647,7 +667,6 @@ class DataAccessor:
             )
         return coords_df
 
-
     @staticmethod
     def _grab_data_to_df(
         input: Tuple[str, xr.DataArray]
@@ -792,7 +811,8 @@ class DataAccessor:
                         stop = start_stops_idxs[i + 1]
                     else:
                         stop = None
-                    logging.info(f'Processing [{num}:{stop}]. datetime={datetime.now()}')
+                    logging.info(
+                        f'Processing [{num}:{stop}]. datetime={datetime.now()}')
 
                     # v2 implementation, select first, load to its own dataarray
                     logging.info(f'Slicing. Datetime={datetime.now()}')
@@ -812,7 +832,7 @@ class DataAccessor:
                     except Exception:
                         logging.info('Failed to scatter input')
                         pass
-                    
+
                     logging.info(f'Multiprocessing. Datetime={datetime.now()}')
                     # run the inputs in parallel
                     futures = executer.map(

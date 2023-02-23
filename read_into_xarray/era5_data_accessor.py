@@ -677,6 +677,19 @@ class ERA5DataAccessor:
             'CDS': ERA5DataAccessor,
         }
 
+    @staticmethod
+    def _prep_bbox(
+        bbox: BoundingBoxDict,
+    ) -> BoundingBoxDict:
+        """Converts a single point bbox to a small bbox with 0.1 degree sides"""
+        if bbox['north'] == bbox['south']:
+            bbox['north'] += 0.05
+            bbox['south'] -= 0.05
+        if bbox['east'] == bbox['west']:
+            bbox['east'] += 0.05
+            bbox['west'] -= 0.05
+        return bbox
+
     def get_data(
         self,
         variables: List[str],
@@ -709,6 +722,9 @@ class ERA5DataAccessor:
         # map variables to underlying data accessor
         accessor_variables_mapper = {}
         cant_add_variables = []
+
+        # prep bbox
+        bbox = self._prep_bbox(bbox)
 
         # see which variables can be fetched from AWS
         aws_variables = []
