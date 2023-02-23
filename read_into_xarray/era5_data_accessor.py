@@ -28,6 +28,7 @@ import multiprocessing
 import logging
 import warnings
 import rioxarray
+import numpy as np
 
 # stop xarray from importing cfgrib by default since it only works well with linux
 import xarray as xr
@@ -96,6 +97,42 @@ class AWSDataAccessor:
             rename_dict[time_dim] = 'time'
         return dataset.rename(rename_dict)
 
+    @staticmethod
+    def _crop_aws_data(
+        ds: xr.Dataset,
+        bbox: BoundingBoxDict,
+    ) -> xr.Dataset:
+        """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
+        # find suitable bounds (min, max)
+        x_bounds = np.array([bbox['west'], bbox['east']])
+        y_bounds = np.array([bbox['south'], bbox['north']])
+
+        # find closest x, y values in the data
+        nearest_x_idxs = np.abs(
+            ds.lon.values - x_bounds.reshape(-1, 1)
+        ).argmin(axis=1)
+        nearest_y_idxs = np.abs(
+            ds.lat.values - y_bounds.reshape(-1, 1)
+        ).argmin(axis=1)
+
+        # make sure we have inclusive bounds
+        if ds.lon.values[nearest_x_idxs[0]] > x_bounds[0]:
+            nearest_x_idxs[0] -= 1
+        if ds.lon.values[nearest_x_idxs[1]] < x_bounds[1]:
+            nearest_x_idxs[1] += 1
+        if ds.lat.values[nearest_x_idxs[0]] > y_bounds[0]:
+            nearest_y_idxs[0] -= 1
+        if ds.lat.values[nearest_x_idxs[1]] < y_bounds[1]:
+            nearest_y_idxs[1] += 1
+
+        # return the sliced dataset
+        return ds.isel(
+            {
+                'lon': slice(nearest_x_idxs[0], nearest_x_idxs[1]),
+                'lat': slice(nearest_y_idxs[0], nearest_y_idxs[1]),
+            }
+        )
+
     def _get_requests_dicts(
         self,
         variables: List[str],
@@ -141,24 +178,6 @@ class AWSDataAccessor:
                     count += 1
         return aws_request_dicts
 
-    @staticmethod
-    def _crop_aws_data(
-        ds: xr.Dataset,
-        bbox: BoundingBoxDict,
-    ) -> xr.Dataset:
-        """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
-        # find suitable bounds
-
-        return
-        aws_request_dict['dataset'] = aws_request_dict['dataset'].rio.clip_box(
-            minx=aws_request_dict['bbox']['west'],
-            miny=aws_request_dict['bbox']['south'],
-            maxx=aws_request_dict['bbox']['east'],
-            maxy=aws_request_dict['bbox']['north'],
-            crs='EPSG:4326',
-        )
-        pass
-
     def _get_aws_data(
         self,
         aws_request_dict: AWSRequestDict,
@@ -169,28 +188,15 @@ class AWSDataAccessor:
         aws_request_dict['dataset'] = xr.open_dataset(
             fsspec.open(endpoint).open(),
             engine='h5netcdf',
-        )  # .copy(deep=True)
+        )
 
         # adjust to switch to standard lat/lon
         aws_request_dict['dataset']['lon'] = aws_request_dict['dataset']['lon'] - 180
 
-        # format then crop
-        aws_request_dict['dataset'].rio.write_crs(
-            'EPSG:4326',
-            inplace=True,
-        )
-        aws_request_dict['dataset'].rio.set_spatial_dims(
-            x_dim='lon',
-            y_dim='lat',
-            inplace=True,
-        )
-        aws_request_dict['dataset'] = aws_request_dict['dataset'].rio.clip_box(
-            minx=aws_request_dict['bbox']['west'],
-            miny=aws_request_dict['bbox']['south'],
-            maxx=aws_request_dict['bbox']['east'],
-            maxy=aws_request_dict['bbox']['north'],
-            crs='EPSG:4326',
-        )
+        aws_request_dict['dataset'] = self._crop_aws_data(
+            aws_request_dict['dataset'],
+            aws_request_dict['bbox'],
+        ).copy()
 
         # rename time dimension if necessary
         aws_request_dict['dataset'] = self._rename_dimensions(
