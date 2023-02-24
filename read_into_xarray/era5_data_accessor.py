@@ -497,7 +497,7 @@ class CDSDataAccessor:
                         sub_days.append(day)
                     else:
                         days_lists.append(sub_days)
-                        sub_days = []
+                        sub_days = [day]
                 if len(sub_days) > 0:
                     days_lists[-1].extend(sub_days)
 
@@ -818,7 +818,14 @@ class ERA5DataAccessor:
                 datasets_dict.pop(k)
 
         # if just one variable, return the dataset
+        # TODO: switch attributes to class variables
         if len(datasets_dict) == 1:
+            # write attributes
+            datasets_dict[list(datasets_dict.keys())[0]
+                          ].attrs['x_dim'] = 'longitude'
+            datasets_dict[list(datasets_dict.keys())[0]
+                          ].attrs['y_dim'] = 'latitude'
+            datasets_dict[list(datasets_dict.keys())[0]].attrs['EPSG'] = 4326
             return datasets_dict[list(datasets_dict.keys())[0]]
         elif len(datasets_dict) == 0:
             raise ValueError(
