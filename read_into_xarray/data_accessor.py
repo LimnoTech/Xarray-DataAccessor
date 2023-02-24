@@ -672,6 +672,11 @@ class DataAccessor:
         input: Tuple[str, xr.DataArray]
     ) -> pd.Series:
         """Testing performance of slicing first and extracting values in parallel"""
+        if len(input[-1].values.shape) == 2:
+            return pd.Series(
+                data=input[-1].values.mean(axis=1),
+                name=input[0],
+            )
         return pd.Series(
             data=input[-1].values,
             name=input[0],
