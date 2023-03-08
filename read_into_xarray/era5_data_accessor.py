@@ -128,10 +128,10 @@ class AWSDataAccessor:
         # return the sliced dataset
         return ds.isel(
             {
-                'lon': slice(nearest_x_idxs[0], nearest_x_idxs[1]),
-                'lat': slice(nearest_y_idxs[0], nearest_y_idxs[1]),
+                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max()),
+                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max()),
             }
-        )
+        ).copy()
 
     def _get_requests_dicts(
         self,
@@ -196,7 +196,7 @@ class AWSDataAccessor:
         aws_request_dict['dataset'] = self._crop_aws_data(
             aws_request_dict['dataset'],
             aws_request_dict['bbox'],
-        ).copy()
+        )
 
         # rename time dimension if necessary
         aws_request_dict['dataset'] = self._rename_dimensions(
