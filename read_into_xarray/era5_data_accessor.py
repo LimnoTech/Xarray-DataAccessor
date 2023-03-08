@@ -314,6 +314,7 @@ class CDSDataAccessor:
     valid_hour_steps = [1, 3, 6, 9, 12]
 
     supported_datasets = DATASET_NAMES
+    institution = 'ECMWF'
 
     def __init__(
         self,
@@ -742,6 +743,32 @@ class ERA5DataAccessor:
             bbox['west'] -= 0.05
         return bbox
 
+    def _write_attrs(
+        self,
+        hours_step: int,
+        cds_variables: List[str],
+        aws_variables: List[str],
+    ) -> dict:
+        """Used to write aligned attributes to all datasets before merging"""
+        attrs = {}
+
+        # write attrs storing top level data source info
+        attrs['dataset_name'] = self.dataset_name
+        attrs['institution'] = CDSDataAccessor.institution
+
+        # write attrs storing projection info
+        attrs['x_dim'] = 'longitude'
+        attrs['y_dim'] = 'latitude'
+        attrs['EPSG'] = 4326
+
+        # write attrs storing time dimension info
+        attrs['time_step'] = hours_step
+
+        # write attrs storing variable source info
+        attrs['Data from CDS API'] = cds_variables
+        attrs['Data from Planet OS AWS S3 bucket'] = aws_variables
+        return attrs
+
     def get_data(
         self,
         variables: List[str],
@@ -758,7 +785,7 @@ class ERA5DataAccessor:
         Arguments:
             :param variables: List of variables to access.
             :param start_dt: Datetime to start at (inclusive),
-            :param end_dt: Datetime to stop at (inclusive).
+            :param end_dt: Datetime to stop at (exclusive).
             :param bbox: Dictionary with bounding box EPSG 4326 lat/longs.
             :param hours_step: Changes the default hours time step from 1.
                 NOTE: This argument is not accessible from DataAccessor!
@@ -820,11 +847,22 @@ class ERA5DataAccessor:
                     f'{accessor.__str__()} returned None. Exception: {e}'
                 )
 
+        # make an updates attributes dictionary
+        attrs_dict = self._write_attrs(
+            hours_step,
+            cds_variables,
+            aws_variables,
+        )
+
         # remove and warn about NoneType responses
         del_keys = []
         for k, v in datasets_dict.items():
             if v is None:
                 del_keys.append(k)
+            else:
+                # write new metadata
+                datasets_dict[k].attrs = attrs_dict
+
         if len(del_keys) > 0:
             warnings.warn(
                 f'Could not get data for the following variables: {del_keys}'
@@ -834,15 +872,7 @@ class ERA5DataAccessor:
 
         # if just one variable, return the dataset
         # TODO: switch attributes to class variables
-        if len(datasets_dict) == 1:
-            # write attributes
-            datasets_dict[list(datasets_dict.keys())[0]
-                          ].attrs['x_dim'] = 'longitude'
-            datasets_dict[list(datasets_dict.keys())[0]
-                          ].attrs['y_dim'] = 'latitude'
-            datasets_dict[list(datasets_dict.keys())[0]].attrs['EPSG'] = 4326
-            return datasets_dict[list(datasets_dict.keys())[0]]
-        elif len(datasets_dict) == 0:
+        if len(datasets_dict) == 0:
             raise ValueError(
                 f'A problem occurred! No data was returned.'
             )
@@ -851,11 +881,6 @@ class ERA5DataAccessor:
         try:
             logging.info('Combining all variable Datasets')
             out_ds = xr.merge(list(datasets_dict.values())).rio.write_crs(4326)
-
-            # write attributes
-            out_ds.attrs['x_dim'] = 'longitude'
-            out_ds.attrs['y_dim'] = 'latitude'
-            out_ds.attrs['EPSG'] = 4326
             return out_ds
 
         # allow data to be salvaged if merging fails
