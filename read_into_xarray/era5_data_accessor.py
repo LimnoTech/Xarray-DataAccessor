@@ -731,7 +731,7 @@ class ERA5DataAccessor:
         }
 
     @staticmethod
-    def _prep_bbox(
+    def _prep_small_bbox(
         bbox: BoundingBoxDict,
     ) -> BoundingBoxDict:
         """Converts a single point bbox to a small bbox with 0.1 degree sides"""
@@ -741,6 +741,39 @@ class ERA5DataAccessor:
         if bbox['east'] == bbox['west']:
             bbox['east'] += 0.05
             bbox['west'] -= 0.05
+        return bbox
+
+    @staticmethod
+    def _round_to_nearest(
+        number: float,
+        shift_up: bool,
+    ) -> float:
+        """Rounds number to nearest 0.25. Either shifts up or down."""
+        num = round((number * 4)) / 4
+        if shift_up:
+            if num < number:
+                num += 0.25
+        else:
+            if num > number:
+                num -= 0.25
+        return num
+
+    def _standardize_bbox(
+        self,
+        bbox: BoundingBoxDict,
+    ) -> BoundingBoxDict:
+        """
+        Converts a bbox to the nearest 0.25 increments.
+
+        NOTE: This is used when combining CDS and AWS data since CDS API returns
+            data at 0.25 increments starting/stopping at the exact bbox coords.
+            In contrast, AWS returns all data in 0.25 increments for the whole 
+            globe and is converted via AWSDataAccessor._crop_aws_data().
+        """
+        bbox['north'] = self._round_to_nearest(bbox['north'], shift_up=True)
+        bbox['east'] = self._round_to_nearest(bbox['east'], shift_up=True)
+        bbox['south'] = self._round_to_nearest(bbox['south'], shift_up=False)
+        bbox['west'] = self._round_to_nearest(bbox['west'], shift_up=False)
         return bbox
 
     def _write_attrs(
@@ -803,7 +836,7 @@ class ERA5DataAccessor:
         cant_add_variables = []
 
         # prep bbox
-        bbox = self._prep_bbox(bbox)
+        bbox = self._prep_small_bbox(bbox)
 
         # see which variables can be fetched from AWS
         aws_variables = []
@@ -827,6 +860,11 @@ class ERA5DataAccessor:
         datasets_dict = {}
         for var in [v for v in variables if v not in cant_add_variables]:
             datasets_dict[var] = None
+
+        # if using both CDS and AWS, convert bbox to 0.25 increments
+        if len(cds_variables) > 0 and len(aws_variables) > 0:
+            bbox = self._standardize_bbox(bbox)
+            # TODO: add logging message
 
         # get the data from both sources
         for accessor, vars in accessor_variables_mapper.items():
@@ -871,7 +909,6 @@ class ERA5DataAccessor:
                 datasets_dict.pop(k)
 
         # if just one variable, return the dataset
-        # TODO: switch attributes to class variables
         if len(datasets_dict) == 0:
             raise ValueError(
                 f'A problem occurred! No data was returned.'
