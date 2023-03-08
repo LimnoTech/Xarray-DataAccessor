@@ -291,6 +291,13 @@ class AWSDataAccessor:
             else:
                 ds = datasets[0]
 
+            # crop by time
+            ds = ds.sel(
+                {
+                    'time': slice(start_dt, end_dt - timedelta(hours=hours_step)),
+                },
+            )
+
             all_data_dict[variable] = ds.rename(
                 {list(ds.data_vars)[0]: variable},
             )
@@ -638,6 +645,14 @@ class CDSDataAccessor:
                     datasets,
                     dim='time',
                 )
+
+                # crop by time
+                ds = ds.sel(
+                    {
+                        'time': slice(start_dt, end_dt - timedelta(hours=hours_step)),
+                    },
+                )
+
                 all_data_dict[variable] = ds.rename(
                     {list(ds.data_vars)[0]: variable},
                 )

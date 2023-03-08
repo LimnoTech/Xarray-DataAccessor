@@ -98,7 +98,7 @@ class DataAccessor:
             :param dataset_name: A valid/supported dataset_name.
             :param variables: A list of variables from param:dataset_name.
             :param start_time: Time/date to start at (inclusive).
-            :param end_time: Time/date to stop at (inclusive).
+            :param end_time: Time/date to stop at (exclusive).
             :param coordinates: Coordinates to define the AOI.
             :param csv_of_coords: A csv of lat/longs to define the AOI.
             :param shapefile: A shapefile (.shp) to define the AOI.
