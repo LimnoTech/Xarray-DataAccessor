@@ -301,7 +301,6 @@ class CDSDataAccessor:
         'netcdf': '.nc',
         'grib': '.grib',
     }
-    valid_hour_steps = [1, 3, 6, 9, 12]
 
     supported_datasets = DATASET_NAMES
     institution = 'ECMWF'
