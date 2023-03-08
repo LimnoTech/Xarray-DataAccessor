@@ -103,9 +103,10 @@ class AWSDataAccessor:
         bbox: BoundingBoxDict,
     ) -> xr.Dataset:
         """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
-        # find suitable bounds (min, max)
-        x_bounds = np.array([bbox['west'], bbox['east']])
-        y_bounds = np.array([bbox['south'], bbox['north']])
+        # make sure we have inclusive bounds at 0.25
+        std_bbox = ERA5DataAccessor._standardize_bbox(bbox)
+        x_bounds = np.array([std_bbox['west'], std_bbox['east']])
+        y_bounds = np.array([std_bbox['south'], std_bbox['north']])
 
         # find closest x, y values in the data
         nearest_x_idxs = np.abs(
@@ -115,21 +116,11 @@ class AWSDataAccessor:
             ds.lat.values - y_bounds.reshape(-1, 1)
         ).argmin(axis=1)
 
-        # make sure we have inclusive bounds
-        if ds.lon.values[nearest_x_idxs[0]] > x_bounds[0]:
-            nearest_x_idxs[0] -= 1
-        if ds.lon.values[nearest_x_idxs[1]] < x_bounds[1]:
-            nearest_x_idxs[1] += 1
-        if ds.lat.values[nearest_x_idxs[0]] > y_bounds[0]:
-            nearest_y_idxs[0] -= 1
-        if ds.lat.values[nearest_x_idxs[1]] < y_bounds[1]:
-            nearest_y_idxs[1] += 1
-
         # return the sliced dataset
         return ds.isel(
             {
-                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max()),
-                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max()),
+                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max() + 1),
+                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max() + 1),
             }
         ).copy()
 
@@ -758,8 +749,8 @@ class ERA5DataAccessor:
                 num -= 0.25
         return num
 
+    @staticmethod
     def _standardize_bbox(
-        self,
         bbox: BoundingBoxDict,
     ) -> BoundingBoxDict:
         """
@@ -770,11 +761,28 @@ class ERA5DataAccessor:
             In contrast, AWS returns all data in 0.25 increments for the whole 
             globe and is converted via AWSDataAccessor._crop_aws_data().
         """
-        bbox['north'] = self._round_to_nearest(bbox['north'], shift_up=True)
-        bbox['east'] = self._round_to_nearest(bbox['east'], shift_up=True)
-        bbox['south'] = self._round_to_nearest(bbox['south'], shift_up=False)
-        bbox['west'] = self._round_to_nearest(bbox['west'], shift_up=False)
-        return bbox
+        out_bbox = {}
+
+        def _round_to_nearest(
+            number: float,
+            shift_up: bool,
+        ) -> float:
+            """Rounds number to nearest 0.25. Either shifts up or down."""
+            num = round((number * 4)) / 4
+            if shift_up:
+                if num < number:
+                    num += 0.25
+            else:
+                if num > number:
+                    num -= 0.25
+            return num
+
+        out_bbox['west'] = _round_to_nearest(bbox['west'], shift_up=False)
+        out_bbox['south'] = _round_to_nearest(bbox['south'], shift_up=False)
+        out_bbox['east'] = _round_to_nearest(bbox['east'], shift_up=True)
+        out_bbox['north'] = _round_to_nearest(bbox['north'], shift_up=True)
+
+        return out_bbox
 
     def _write_attrs(
         self,
@@ -864,7 +872,6 @@ class ERA5DataAccessor:
         # if using both CDS and AWS, convert bbox to 0.25 increments
         if len(cds_variables) > 0 and len(aws_variables) > 0:
             bbox = self._standardize_bbox(bbox)
-            # TODO: add logging message
 
         # get the data from both sources
         for accessor, vars in accessor_variables_mapper.items():
@@ -916,8 +923,9 @@ class ERA5DataAccessor:
 
         # combine the data from multiple sources
         try:
-            logging.info('Combining all variable Datasets')
+            logging.info('Combining all variable Datasets...')
             out_ds = xr.merge(list(datasets_dict.values())).rio.write_crs(4326)
+            logging.info('Done! Returning combined dataset.')
             return out_ds
 
         # allow data to be salvaged if merging fails
