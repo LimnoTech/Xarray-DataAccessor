@@ -500,10 +500,9 @@ class CDSDataAccessor:
                     time_dicts.append(time_dict)
 
         # add hours if necessary to each time dict
-        if specific_hours is not None:
-            hours = self._get_hours_list(specific_hours)
-            for i, time_dict in enumerate(time_dicts):
-                time_dicts[i]['time'] = hours
+        hours = self._get_hours_list(specific_hours)
+        for i, time_dict in enumerate(time_dicts):
+            time_dicts[i]['time'] = hours
         return time_dicts
 
     def _get_api_response(
