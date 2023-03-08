@@ -21,6 +21,7 @@ dependencies:
   - cfgrib
   - eccodes
   - pyarrow
+  - zarr
 
   # Interactivity & Visualization (optional, but required for viz)
   - jupyterlab
