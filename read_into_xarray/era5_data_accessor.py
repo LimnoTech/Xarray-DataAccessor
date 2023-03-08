@@ -203,7 +203,6 @@ class AWSDataAccessor:
         end_dt: datetime,
         bbox: BoundingBoxDict,
         use_dask: bool = False,
-        hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
         """
@@ -285,7 +284,7 @@ class AWSDataAccessor:
             # crop by time
             ds = ds.sel(
                 {
-                    'time': slice(start_dt, end_dt - timedelta(hours=hours_step)),
+                    'time': slice(start_dt, end_dt),
                 },
             )
 
@@ -420,16 +419,10 @@ class CDSDataAccessor:
 
     def _get_hours_list(
         self,
-        hours_step: int = 1,
         specific_hours: Optional[List[int]] = None,
     ) -> List[str]:
         if specific_hours is None:
-            if hours_step not in self.valid_hour_steps:
-                raise ValueError(
-                    f'param:hours_time_step must be one of the following: '
-                    f'{self.valid_hour_steps}'
-                )
-            specific_hours = list(range(0, 24, hours_step))
+            specific_hours = list(range(0, 24, 1))
 
         else:
             i_len = len(specific_hours)
@@ -450,7 +443,6 @@ class CDSDataAccessor:
         self,
         start_dt: datetime,
         end_dt: datetime,
-        hours_step: Optional[int] = None,
         specific_hours: Optional[List[int]] = None,
     ) -> List[Dict[str, List[str]]]:
         """Gets monthly time dictionaries for batch processing"""
@@ -509,8 +501,8 @@ class CDSDataAccessor:
                     time_dicts.append(time_dict)
 
         # add hours if necessary to each time dict
-        if hours_step is not None or specific_hours is not None:
-            hours = self._get_hours_list(hours_step, specific_hours)
+        if specific_hours is not None:
+            hours = self._get_hours_list(specific_hours)
             for i, time_dict in enumerate(time_dicts):
                 time_dicts[i]['time'] = hours
         return time_dicts
@@ -550,7 +542,6 @@ class CDSDataAccessor:
         end_dt: datetime,
         bbox: BoundingBoxDict,
         use_dask: bool = False,
-        hours_step: int = 1,  # TODO: deal with optionality here
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
         """
@@ -563,7 +554,6 @@ class CDSDataAccessor:
         time_dicts = self._get_time_dicts(
             start_dt,
             end_dt,
-            hours_step=hours_step,
             specific_hours=specific_hours,
         )
 
@@ -641,7 +631,7 @@ class CDSDataAccessor:
                 # crop by time
                 ds = ds.sel(
                     {
-                        'time': slice(start_dt, end_dt - timedelta(hours=hours_step)),
+                        'time': slice(start_dt, end_dt),
                     },
                 )
 
@@ -786,7 +776,6 @@ class ERA5DataAccessor:
 
     def _write_attrs(
         self,
-        hours_step: int,
         cds_variables: List[str],
         aws_variables: List[str],
     ) -> dict:
@@ -803,7 +792,7 @@ class ERA5DataAccessor:
         attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
-        attrs['time_step'] = hours_step
+        attrs['time_step'] = 'hourly'
 
         # write attrs storing variable source info
         attrs['Data from CDS API'] = cds_variables
@@ -816,7 +805,6 @@ class ERA5DataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
-        hours_step: int = 1,  # TODO: deal with optionality here
         specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
         """Gathers the desired variables for ones time/space AOI.
@@ -828,8 +816,6 @@ class ERA5DataAccessor:
             :param start_dt: Datetime to start at (inclusive),
             :param end_dt: Datetime to stop at (exclusive).
             :param bbox: Dictionary with bounding box EPSG 4326 lat/longs.
-            :param hours_step: Changes the default hours time step from 1.
-                NOTE: This argument is not accessible from DataAccessor!
             :param specific_hours: Only pull data from a specific hour(s).
                 NOTE: This argument is not accessible from DataAccessor!
 
@@ -837,7 +823,10 @@ class ERA5DataAccessor:
             A xarray Dataset with all desired data.
         """
         # TODO: make compatible with monthly requests
-        # TODO: think about how we want to allow access to hours_step and specific_hours
+        # TODO: think about how we want to allow access specific_hours
+
+        # adjust end_dt to make the range exclusive
+        end_dt = end_dt - timedelta(hours=1)
 
         # map variables to underlying data accessor
         accessor_variables_mapper = {}
@@ -883,7 +872,6 @@ class ERA5DataAccessor:
                         end_dt=end_dt,
                         bbox=bbox,
                         use_dask=self.use_dask,
-                        hours_step=hours_step,
                         specific_hours=specific_hours,
                     ),
                 )
@@ -894,7 +882,6 @@ class ERA5DataAccessor:
 
         # make an updates attributes dictionary
         attrs_dict = self._write_attrs(
-            hours_step,
             cds_variables,
             aws_variables,
         )
