@@ -831,9 +831,9 @@ class DataAccessor:
 
                     # v2 implementation, select first, load to its own dataarray
                     logging.info(f'Slicing. Datetime={datetime.now()}')
-                    input = []
+                    input_list = []
                     for p, xy in list(points_nearest_xy_idxs.items())[num:stop]:
-                        input.append((p, self.xarray_dataset.isel(
+                        input_list.append((p, self.xarray_dataset.isel(
                             {
                                 self.xarray_dataset.attrs['x_dim']: xy[0],
                                 self.xarray_dataset.attrs['y_dim']: xy[1],
@@ -843,23 +843,23 @@ class DataAccessor:
 
                     logging.info(f'Scattering. Datetime={datetime.now()}')
                     try:
-                        input = executer.scatter(input)
+                        input_list = executer.scatter(input_list)
                     except Exception:
-                        logging.info('Failed to scatter input')
+                        logging.info('Failed to scatter input_list')
                         pass
 
                     logging.info(f'Multiprocessing. Datetime={datetime.now()}')
                     # run the inputs in parallel
                     futures = executer.map(
                         self._grab_data_to_df,
-                        input,
+                        input_list,
                     )
 
                     # get the series back for the batch of points
                     for future in as_completed_func(futures):
                         pandas_series.append(future.result())
                     del futures
-                    del input
+                    del input_list
 
                 df = pd.concat(
                     pandas_series,
