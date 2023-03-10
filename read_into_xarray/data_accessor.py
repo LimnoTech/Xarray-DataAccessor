@@ -689,7 +689,7 @@ class DataAccessor:
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
         save_table_prefix: Optional[str] = None,
-    ) -> None:
+    ) -> Path:
         # save if necessary
         if not save_table_prefix:
             prefix = ''
@@ -703,30 +703,32 @@ class DataAccessor:
             warnings.warn(
                 f'Output directory {save_table_dir} does not exist!'
             )
+
         if save_table_suffix is None or save_table_suffix == '.parquet':
-            df.to_parquet(
-                Path(save_table_dir /
-                     f'{prefix}{variable}.parquet'),
+            out_path = Path(
+                save_table_dir / f'{prefix}{variable}.parquet'
             )
+            df.to_parquet(out_path)
 
         elif save_table_suffix == '.csv':
-            df.to_csv(
-                Path(save_table_dir /
-                     f'{prefix}{variable}.parquet'),
+            out_path = Path(
+                save_table_dir / f'{prefix}{variable}.csv'
             )
+            df.to_csv(out_path)
+
         elif save_table_suffix == '.xlsx':
-            df.to_excel(
-                Path(save_table_dir / f'{prefix}{variable}.xlsx'),
+            out_path = Path(
+                save_table_dir / f'{prefix}{variable}.xlsx'
             )
+            df.to_excel(out_path)
         else:
-            warnings.warn(
+            raise ValueError(
                 f'{save_table_suffix} is not a valid table format!'
             )
-            no_success = True
-        if not no_success:
-            logging.info(
-                f'Data for variable={variable} saved @ {save_table_dir}'
-            )
+        logging.info(
+            f'Data for variable={variable} saved @ {save_table_dir}'
+        )
+        return out_path
 
     def get_data_tables(
         self,
@@ -738,7 +740,15 @@ class DataAccessor:
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
         save_table_prefix: Optional[str] = None,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Dict[str, Union[pd.DataFrame, Path]]:
+        """
+        Returns:
+            A dictionary with variable names as keys, and dataframes as values
+                if save_table_dir==None, or the output table path as values if
+                save_table_dir is not None.
+        """
+        # init output dictionary
+        out_dict = {}
 
         # clean variables input
         variables = self._verify_variables(variables)
@@ -864,12 +874,18 @@ class DataAccessor:
                 )
 
                 # save to file
-                logging.info(f'Saving dataframe, datetime={datetime.now()}')
-                self._save_dataframe(
-                    df,
-                    variable=variable,
-                    save_table_dir=save_table_dir,
-                    save_table_suffix=save_table_suffix,
-                    save_table_prefix=save_table_prefix,
-                )
-                del df
+                if save_table_dir:
+                    logging.info(
+                        f'Saving dataframe, datetime={datetime.now()}')
+                    table_path = self._save_dataframe(
+                        df,
+                        variable=variable,
+                        save_table_dir=save_table_dir,
+                        save_table_suffix=save_table_suffix,
+                        save_table_prefix=save_table_prefix,
+                    )
+                    out_dict[variable] = table_path
+                    del df
+                else:
+                    out_dict[variable] = df
+        return out_dict
