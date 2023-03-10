@@ -730,66 +730,21 @@ class DataAccessor:
         )
         return out_path
 
-    def get_data_tables(
+    def _get_data_tables_multiprocess(
         self,
-        variables: Optional[List[str]] = None,
-        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
-        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
-        coords_id_column: Optional[str] = None,
-        xy_columns: Optional[Tuple[str, str]] = None,
+        variables: List[str],
+        points_nearest_xy_idxs: Dict[str, Tuple[int, int]],
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
         save_table_prefix: Optional[str] = None,
     ) -> Dict[str, Union[pd.DataFrame, Path]]:
+        """Iterative data samping at points batched by 1000 points.
+
+        NOTE: The overhead is significant! This should only be used if you have
+            many data points to sample for (i.e. >10k) or many variables.
         """
-        Returns:
-            A dictionary with variable names as keys, and dataframes as values
-                if save_table_dir==None, or the output table path as values if
-                save_table_dir is not None.
-        """
-        # init output dictionary
+        # init out dict
         out_dict = {}
-
-        # clean variables input
-        variables = self._verify_variables(variables)
-
-        # get x/y columns
-        if xy_columns is None:
-            xy_columns = ('lon', 'lat')
-        x_col, y_col = xy_columns
-
-        # get coords input from csv
-        coords_df = self._get_coords_df(
-            coords=coords,
-            csv_of_coords=csv_of_coords,
-            coords_id_column=coords_id_column,
-        )
-
-        # get the point x/y values
-        point_xs = coords_df[x_col].values
-        point_ys = coords_df[y_col].values
-        point_ids = [str(i) for i in coords_df.index.values]
-
-        # get dimension names
-        x_dim = self.xarray_dataset.attrs['x_dim']
-        y_dim = self.xarray_dataset.attrs['y_dim']
-
-        # get all coordinates from the dataset
-        ds_xs = self.xarray_dataset[x_dim].values
-        ds_ys = self.xarray_dataset[y_dim].values
-
-        # get nearest lat/longs for each sample point
-        nearest_x_idxs = np.abs(ds_xs - point_xs.reshape(-1, 1)).argmin(axis=1)
-        nearest_y_idxs = np.abs(ds_ys - point_ys.reshape(-1, 1)).argmin(axis=1)
-
-        # get a dict with point IDs as keys, and nearest x/y indices as values
-        points_nearest_xy_idxs = dict(zip(
-            point_ids,
-            zip(nearest_x_idxs, nearest_y_idxs)
-        ))
-
-        # clear some memory
-        del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
 
         # get batches of max 100 points to avoid memory overflow
         batch_size = 1000
@@ -805,14 +760,9 @@ class DataAccessor:
             close_existing_client=True,
         )
 
-        # prep chunks
-        self.xarray_dataset = self.xarray_dataset.chunk(
-            {'time': 10000, x_dim: 10, y_dim: 10}
-        )
-
         with client as executer:
             for variable in variables:
-                logging.info(f'Saving {variable} data to {save_table_dir}')
+                logging.info(f'Sampling {variable} data ')
                 # store the futures and dataframe
                 pandas_series = []
                 pandas_series.append(
@@ -876,7 +826,8 @@ class DataAccessor:
                 # save to file
                 if save_table_dir:
                     logging.info(
-                        f'Saving dataframe, datetime={datetime.now()}')
+                        f'Saving df to {save_table_dir}, datetime={datetime.now()}'
+                    )
                     table_path = self._save_dataframe(
                         df,
                         variable=variable,
@@ -888,4 +839,152 @@ class DataAccessor:
                     del df
                 else:
                     out_dict[variable] = df
-        return out_dict
+
+    def _get_data_tables_single_thread(
+        self,
+        variables: List[str],
+        points_nearest_xy_idxs: Dict[str, Tuple[int, int]],
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Iterative data sampling at points"""
+        # init out dictionary
+        out_dict = {}
+
+        # grab data for each variable iteratively
+        for variable in variables:
+            pandas_series = []
+            pandas_series.append(
+                pd.Series(
+                    data=self.xarray_dataset[variable].time.values,
+                    name='datetime',
+                ),
+            )
+            logging.info(f'Slicing. Datetime={datetime.now()}')
+            input_list = []
+            for p, xy in list(points_nearest_xy_idxs.items()):
+                input_list.append((p, self.xarray_dataset.isel(
+                    {
+                        self.xarray_dataset.attrs['x_dim']: xy[0],
+                        self.xarray_dataset.attrs['y_dim']: xy[1],
+                    },
+                )[variable].load()
+                ))
+
+            # get the series back for the batch of points
+            logging.info(f'Grabbing data. Datetime={datetime.now()}')
+            for i in input_list:
+                pandas_series.append(self._grab_data_to_df(i))
+            del input_list
+
+            df = pd.concat(
+                pandas_series,
+                axis=1,
+                copy=False,
+            ).set_index('datetime')
+            df.sort_index(inplace=True)
+
+            # sort columns
+            df = df.reindex(
+                columns=list(points_nearest_xy_idxs.keys()),
+            )
+
+            # save to file
+            if save_table_dir:
+                logging.info(
+                    f'Saving df to {save_table_dir}, datetime={datetime.now()}'
+                )
+                table_path = self._save_dataframe(
+                    df,
+                    variable=variable,
+                    save_table_dir=save_table_dir,
+                    save_table_suffix=save_table_suffix,
+                    save_table_prefix=save_table_prefix,
+                )
+                out_dict[variable] = table_path
+                del df
+            else:
+                out_dict[variable] = df
+
+    def get_data_tables(
+        self,
+        variables: Optional[List[str]] = None,
+        coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        coords_id_column: Optional[str] = None,
+        xy_columns: Optional[Tuple[str, str]] = None,
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+        multiprocess: bool = False,
+    ) -> Dict[str, Union[pd.DataFrame, Path]]:
+        """
+        Returns:
+            A dictionary with variable names as keys, and dataframes as values
+                if save_table_dir==None, or the output table path as values if
+                save_table_dir is not None.
+        """
+        # clean variables input
+        variables = self._verify_variables(variables)
+
+        # get x/y columns
+        if xy_columns is None:
+            xy_columns = ('lon', 'lat')
+        x_col, y_col = xy_columns
+
+        # get coords input from csv
+        coords_df = self._get_coords_df(
+            coords=coords,
+            csv_of_coords=csv_of_coords,
+            coords_id_column=coords_id_column,
+        )
+
+        # get the point x/y values
+        point_xs = coords_df[x_col].values
+        point_ys = coords_df[y_col].values
+        point_ids = [str(i) for i in coords_df.index.values]
+
+        # get dimension names
+        x_dim = self.xarray_dataset.attrs['x_dim']
+        y_dim = self.xarray_dataset.attrs['y_dim']
+
+        # get all coordinates from the dataset
+        ds_xs = self.xarray_dataset[x_dim].values
+        ds_ys = self.xarray_dataset[y_dim].values
+
+        # get nearest lat/longs for each sample point
+        nearest_x_idxs = np.abs(ds_xs - point_xs.reshape(-1, 1)).argmin(axis=1)
+        nearest_y_idxs = np.abs(ds_ys - point_ys.reshape(-1, 1)).argmin(axis=1)
+
+        # get a dict with point IDs as keys, and nearest x/y indices as values
+        points_nearest_xy_idxs = dict(zip(
+            point_ids,
+            zip(nearest_x_idxs, nearest_y_idxs)
+        ))
+
+        # clear some memory
+        del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
+
+        # prep chunks
+        self.xarray_dataset = self.xarray_dataset.chunk(
+            {'time': 10000, x_dim: 10, y_dim: 10}
+        )
+
+        # use either the multiprocessing workflow (for many points) or single processing
+        if multiprocess:
+            return self._get_data_tables_multiprocess(
+                variables,
+                points_nearest_xy_idxs,
+                save_table_dir=save_table_dir,
+                save_table_suffix=save_table_suffix,
+                save_table_prefix=save_table_prefix,
+            )
+        else:
+            return self._get_data_tables_single_thread(
+                variables,
+                points_nearest_xy_idxs,
+                save_table_dir=save_table_dir,
+                save_table_suffix=save_table_suffix,
+                save_table_prefix=save_table_prefix,
+            )
