@@ -2,6 +2,8 @@
 
 **NOTE:** Change name to something more generic!
 
+**IMPORTANT NOTE:** While reading data from AWS is much faster, loading the date to disk from it is **MUCH** slower than when using local netcdf or zarr files. One can use the `use_cdf_only` keyword argument to make sure all ERA5 data is loaded from temporary local netcdf files downloaded via the CDS API. A case where this would be desirable is if you plan to sample at points from the data (will speed up performance 100+x). If you are visualizing the data, or manipulating it within xarray natively, it is faster to just stick with the default and access AWS when possible.
+
 
 A repo to efficiently read data into [Xarray](https://docs.xarray.dev/en/stable/) using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization via the CDS API or s3 AWS bucket.
 
