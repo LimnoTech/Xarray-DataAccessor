@@ -132,6 +132,7 @@ class AWSDataAccessor:
         bbox: BoundingBoxDict,
     ) -> List[AWSRequestDict]:
 
+        # set filesystem and endpooint prefix
         endpoint_prefix = r's3://era5-pds'
 
         # init list to store request tuples
@@ -286,7 +287,7 @@ class AWSDataAccessor:
                 {
                     'time': slice(start_dt, end_dt),
                 },
-            )
+            ).copy(deep=True)
 
             all_data_dict[variable] = ds.rename(
                 {list(ds.data_vars)[0]: variable},
@@ -672,6 +673,14 @@ class ERA5DataAccessor:
 
         # set file format (checking it is handled in CDSDataAccessor)
         self.file_format = file_format
+
+        # access kwargs
+        if 'use_dask' in kwargs['kwargs'].keys():
+            use_dask = kwargs['kwargs']['use_dask']
+        if 'use_cds_only' in kwargs['kwargs'].keys():
+            use_cds_only = kwargs['kwargs']['use_cds_only']
+        if 'file_format' in kwargs['kwargs'].keys():
+            file_format = kwargs['kwargs']['file_format']
 
         # bring in dataset name
         verify_dataset(dataset_name)
