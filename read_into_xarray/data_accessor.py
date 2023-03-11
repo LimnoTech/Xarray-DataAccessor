@@ -1,5 +1,6 @@
 import warnings
 import logging
+import itertools
 import multiprocessing
 from read_into_xarray.multi_threading import get_multithread
 from pathlib import Path
@@ -730,19 +731,20 @@ class DataAccessor:
         )
         return out_path
 
-    def _get_data_tables_multiprocess(
+    def _get_data_table_iterative_mp(
         self,
-        variables: List[str],
+        variable: str,
         points_nearest_xy_idxs: Dict[str, Tuple[int, int]],
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
         save_table_prefix: Optional[str] = None,
     ) -> Dict[str, Union[pd.DataFrame, Path]]:
-        """Iterative data samping at points batched by 1000 points.
+        """Iterative data sampling w/ multiprocessing batched by 1000 points.
 
         NOTE: The overhead is significant! This should only be used if you have
             many data points to sample for (i.e. >10k) or many variables.
         """
+        raise NotImplementedError
         # init out dict
         out_dict = {}
 
@@ -761,99 +763,8 @@ class DataAccessor:
         )
 
         with client as executer:
-            for variable in variables:
-                logging.info(f'Sampling {variable} data ')
-                # store the futures and dataframe
-                pandas_series = []
-                pandas_series.append(
-                    pd.Series(
-                        data=self.xarray_dataset[variable].time.values,
-                        name='datetime',
-                    ),
-                )
-                for i, num in enumerate(start_stops_idxs):
-                    if num != start_stops_idxs[-1]:
-                        stop = start_stops_idxs[i + 1]
-                    else:
-                        stop = None
-                    logging.info(
-                        f'Processing [{num}:{stop}]. datetime={datetime.now()}')
-
-                    # v2 implementation, select first, load to its own dataarray
-                    logging.info(f'Slicing. Datetime={datetime.now()}')
-                    input_list = []
-                    for p, xy in list(points_nearest_xy_idxs.items())[num:stop]:
-                        input_list.append((p, self.xarray_dataset.isel(
-                            {
-                                self.xarray_dataset.attrs['x_dim']: xy[0],
-                                self.xarray_dataset.attrs['y_dim']: xy[1],
-                            },
-                        )[variable].load()
-                        ))
-
-                    logging.info(f'Scattering. Datetime={datetime.now()}')
-                    try:
-                        input_list = executer.scatter(input_list)
-                    except Exception:
-                        logging.info('Failed to scatter input_list')
-                        pass
-
-                    logging.info(f'Multiprocessing. Datetime={datetime.now()}')
-                    # run the inputs in parallel
-                    futures = executer.map(
-                        self._grab_data_to_df,
-                        input_list,
-                    )
-
-                    # get the series back for the batch of points
-                    for future in as_completed_func(futures):
-                        pandas_series.append(future.result())
-                    del futures
-                    del input_list
-
-                df = pd.concat(
-                    pandas_series,
-                    axis=1,
-                    copy=False,
-                ).set_index('datetime')
-                df.sort_index(inplace=True)
-
-                # sort columns
-                df = df.reindex(
-                    columns=list(points_nearest_xy_idxs.keys()),
-                )
-
-                # save to file
-                if save_table_dir:
-                    logging.info(
-                        f'Saving df to {save_table_dir}, datetime={datetime.now()}'
-                    )
-                    table_path = self._save_dataframe(
-                        df,
-                        variable=variable,
-                        save_table_dir=save_table_dir,
-                        save_table_suffix=save_table_suffix,
-                        save_table_prefix=save_table_prefix,
-                    )
-                    out_dict[variable] = table_path
-                    del df
-                else:
-                    out_dict[variable] = df
-
-    def _get_data_tables_single_thread(
-        self,
-        variables: List[str],
-        points_nearest_xy_idxs: Dict[str, Tuple[int, int]],
-        save_table_dir: Optional[Union[str, Path]] = None,
-        save_table_suffix: Optional[str] = None,
-        save_table_prefix: Optional[str] = None,
-    ) -> pd.DataFrame:
-        """Iterative data sampling at points"""
-        # init out dictionary
-        out_dict = {}
-
-        # grab data for each variable iteratively
-        for variable in variables:
+            logging.info(f'Sampling {variable} data ')
+            # store the futures and dataframe
             pandas_series = []
             pandas_series.append(
                 pd.Series(
@@ -861,22 +772,45 @@ class DataAccessor:
                     name='datetime',
                 ),
             )
-            logging.info(f'Slicing. Datetime={datetime.now()}')
-            input_list = []
-            for p, xy in list(points_nearest_xy_idxs.items()):
-                input_list.append((p, self.xarray_dataset.isel(
-                    {
-                        self.xarray_dataset.attrs['x_dim']: xy[0],
-                        self.xarray_dataset.attrs['y_dim']: xy[1],
-                    },
-                )[variable].load()
-                ))
+            for i, num in enumerate(start_stops_idxs):
+                if num != start_stops_idxs[-1]:
+                    stop = start_stops_idxs[i + 1]
+                else:
+                    stop = None
+                logging.info(
+                    f'Processing [{num}:{stop}]. datetime={datetime.now()}')
 
-            # get the series back for the batch of points
-            logging.info(f'Grabbing data. Datetime={datetime.now()}')
-            for i in input_list:
-                pandas_series.append(self._grab_data_to_df(i))
-            del input_list
+                # v2 implementation, select first, load to its own dataarray
+                logging.info(f'Slicing. Datetime={datetime.now()}')
+                input_list = []
+                for p, xy in list(points_nearest_xy_idxs.items())[num:stop]:
+                    input_list.append((p, self.xarray_dataset.isel(
+                        {
+                            self.xarray_dataset.attrs['x_dim']: xy[0],
+                            self.xarray_dataset.attrs['y_dim']: xy[1],
+                        },
+                    )[variable].load()
+                    ))
+
+                logging.info(f'Scattering. Datetime={datetime.now()}')
+                try:
+                    input_list = executer.scatter(input_list)
+                except Exception:
+                    logging.info('Failed to scatter input_list')
+                    pass
+
+                logging.info(f'Multiprocessing. Datetime={datetime.now()}')
+                # run the inputs in parallel
+                futures = executer.map(
+                    self._grab_data_to_df,
+                    input_list,
+                )
+
+                # get the series back for the batch of points
+                for future in as_completed_func(futures):
+                    pandas_series.append(future.result())
+                del futures
+                del input_list
 
             df = pd.concat(
                 pandas_series,
@@ -907,6 +841,150 @@ class DataAccessor:
             else:
                 out_dict[variable] = df
 
+    def _get_data_table_iterative_sp(
+        self,
+        variable: str,
+        points_nearest_xy_idxs: Dict[str, Tuple[int, int]],
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Iterative data sampling at points"""
+        raise NotImplementedError
+        logging.info(
+            f'Extracting {variable} data (iterative method)'
+        )
+        # init out dictionary
+        out_dict = {}
+
+        # grab data for each variable iteratively
+        pandas_series = []
+        pandas_series.append(
+            pd.Series(
+                data=self.xarray_dataset[variable].time.values,
+                name='datetime',
+            ),
+        )
+        logging.info(f'Slicing. Datetime={datetime.now()}')
+        input_list = []
+        for p, xy in list(points_nearest_xy_idxs.items()):
+            input_list.append((p, self.xarray_dataset.isel(
+                {
+                    self.xarray_dataset.attrs['x_dim']: xy[0],
+                    self.xarray_dataset.attrs['y_dim']: xy[1],
+                },
+            )[variable].load()
+            ))
+
+        # get the series back for the batch of points
+        logging.info(f'Grabbing data. Datetime={datetime.now()}')
+        for i in input_list:
+            pandas_series.append(self._grab_data_to_df(i))
+        del input_list
+
+        df = pd.concat(
+            pandas_series,
+            axis=1,
+            copy=False,
+        ).set_index('datetime')
+        df.sort_index(inplace=True)
+
+        # sort columns
+        df = df.reindex(
+            columns=list(points_nearest_xy_idxs.keys()),
+        )
+
+        # save to file
+        if save_table_dir:
+            logging.info(
+                f'Saving df to {save_table_dir}, datetime={datetime.now()}'
+            )
+            table_path = self._save_dataframe(
+                df,
+                variable=variable,
+                save_table_dir=save_table_dir,
+                save_table_suffix=save_table_suffix,
+                save_table_prefix=save_table_prefix,
+            )
+            out_dict[variable] = table_path
+            del df
+        else:
+            out_dict[variable] = df
+
+    def _get_data_table_vectorized(
+        self,
+        variable: str,
+        point_ids: List[str],
+        id_to_index: Dict[str, int],
+        xy_dims: Tuple[str, str],
+        save_table_dir: Optional[Union[str, Path]] = None,
+        save_table_suffix: Optional[str] = None,
+        save_table_prefix: Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        # unpack dimension names
+        x_dim, y_dim = xy_dims
+        logging.info(
+            f'Extracting {variable} data (vectorized method)'
+        )
+        # make a copy of the data for our variable of interest
+        ds = self.xarray_dataset[variable].copy()
+
+        # convert x/y dimensions to integer indexes
+        ds[x_dim] = list(range(len(ds[x_dim].values)))
+        ds[y_dim] = list(range(len(ds[y_dim].values)))
+
+        # "stack" the dataset and convert to a dataframe
+        ds_df = ds.stack(
+            xy_index=(x_dim, y_dim),
+            create_index=False,
+        ).to_dataframe().drop(columns=[x_dim, y_dim]).reset_index()
+
+        del ds
+
+        # pivot the dataframe to have all point combo ids as columns
+        ds_df = ds_df.pivot(
+            index='time',
+            columns='xy_index',
+            values=variable,
+        )
+        ds_df.index.name = 'datetime'
+
+        # convert the dictionary to a dataframe
+        index_map = pd.DataFrame(
+            list(id_to_index.items()),
+            columns=['key', 'index'],
+        ).set_index('key')
+
+        # get the point indexes to query data with
+        point_indexes = index_map.loc[point_ids].values.flatten()
+
+        # create your final dataframe
+        df = pd.DataFrame(
+            columns=point_ids,
+            index=ds_df.index,
+            data=(
+                ds_df.loc[:, point_indexes].values
+            ),
+        ).sort_index(axis=1).sort_index(axis=0)
+
+        # save to file
+        if save_table_dir:
+            logging.info(
+                f'Saving df to {save_table_dir}, datetime={datetime.now()}'
+            )
+            table_path = self._save_dataframe(
+                df,
+                variable=variable,
+                save_table_dir=save_table_dir,
+                save_table_suffix=save_table_suffix,
+                save_table_prefix=save_table_prefix,
+            )
+            del df
+            return table_path
+        else:
+            return df
+
     def get_data_tables(
         self,
         variables: Optional[List[str]] = None,
@@ -917,7 +995,6 @@ class DataAccessor:
         save_table_dir: Optional[Union[str, Path]] = None,
         save_table_suffix: Optional[str] = None,
         save_table_prefix: Optional[str] = None,
-        multiprocess: bool = False,
     ) -> Dict[str, Union[pd.DataFrame, Path]]:
         """
         Returns:
@@ -925,6 +1002,9 @@ class DataAccessor:
                 if save_table_dir==None, or the output table path as values if
                 save_table_dir is not None.
         """
+        # init output dictionary
+        out_dict = {}
+
         # clean variables input
         variables = self._verify_variables(variables)
 
@@ -963,28 +1043,55 @@ class DataAccessor:
             zip(nearest_x_idxs, nearest_y_idxs)
         ))
 
+        # get all x/long to y/lat combos
+        combos = list(itertools.product(
+            range(len(self.xarray_dataset[x_dim].values)),
+            range(len(self.xarray_dataset[y_dim].values)),
+        ))
+
+        # make sure they are in the right order to reshape!
+        combo_dict = dict(zip(combos, range(len(combos))))
+
+        # get point id to xy combo index
+        id_to_index = {}
+        for pid, coord in points_nearest_xy_idxs.items():
+            id_to_index[pid] = combo_dict[coord]
+
         # clear some memory
-        del nearest_x_idxs, nearest_y_idxs, point_ids, point_xs, point_ys
+        del (
+            nearest_x_idxs,
+            nearest_y_idxs,
+            point_xs,
+            point_ys,
+            combos,
+            combo_dict,
+        )
 
         # prep chunks
         self.xarray_dataset = self.xarray_dataset.chunk(
             {'time': 10000, x_dim: 10, y_dim: 10}
         )
 
-        # use either the multiprocessing workflow (for many points) or single processing
-        if multiprocess:
-            return self._get_data_tables_multiprocess(
-                variables,
-                points_nearest_xy_idxs,
-                save_table_dir=save_table_dir,
-                save_table_suffix=save_table_suffix,
-                save_table_prefix=save_table_prefix,
-            )
-        else:
-            return self._get_data_tables_single_thread(
-                variables,
-                points_nearest_xy_idxs,
-                save_table_dir=save_table_dir,
-                save_table_suffix=save_table_suffix,
-                save_table_prefix=save_table_prefix,
-            )
+        # get data for each variable
+        for variable in variables:
+            # TODO: generalize if we bring on more datasets!
+            encoding_dict = self.xarray_dataset[variable].encoding
+            if 'source' in encoding_dict.keys():
+                if 'S3FileSystem' in encoding_dict['source']:
+                    warnings.warn(
+                        'Extracting values from data being read from the cloud '
+                        'is incredibly slow! Consider interrupting this function '
+                        'and re-assigning DataAccessor.xarray_dataset to a locally '
+                        'saved version of the data.'
+                    )
+            else:
+                out_dict[variable] = self._get_data_table_vectorized(
+                    variable,
+                    point_ids,
+                    id_to_index,
+                    xy_dims=(x_dim, y_dim),
+                    save_table_dir=save_table_dir,
+                    save_table_suffix=save_table_suffix,
+                    save_table_prefix=save_table_prefix,
+                )
+        return out_dict
