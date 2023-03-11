@@ -927,46 +927,81 @@ class DataAccessor:
         logging.info(
             f'Extracting {variable} data (vectorized method)'
         )
-        # make a copy of the data for our variable of interest
-        ds = self.xarray_dataset[variable].copy()
 
-        # convert x/y dimensions to integer indexes
-        ds[x_dim] = list(range(len(ds[x_dim].values)))
-        ds[y_dim] = list(range(len(ds[y_dim].values)))
+        # get batches of max 100 points to avoid memory overflow
+        batch_size = 100
+        start_stops_idxs = list(range(
+            0,
+            len(self.xarray_dataset.time) + 1,
+            batch_size,
+        ))
 
-        # "stack" the dataset and convert to a dataframe
-        ds_df = ds.stack(
-            xy_index=(x_dim, y_dim),
-            create_index=False,
-        ).to_dataframe().drop(columns=[x_dim, y_dim]).reset_index()
+        # init list to store dataframes
+        out_dfs = []
 
-        del ds
+        for i, num in enumerate(start_stops_idxs):
+            start = num
+            if num != start_stops_idxs[-1]:
+                stop = start_stops_idxs[i + 1]
+            else:
+                stop = None
+            logging.info(
+                f'Processing time slice [{num}:{stop}]. datetime={datetime.now()}'
+            )
 
-        # pivot the dataframe to have all point combo ids as columns
-        ds_df = ds_df.pivot(
-            index='time',
-            columns='xy_index',
-            values=variable,
+            # make a copy of the data for our variable of interest
+            ds = self.xarray_dataset[variable].isel(
+                time=slice(start, stop)
+            ).load()
+
+            # convert x/y dimensions to integer indexes
+            ds[x_dim] = list(range(len(ds[x_dim].values)))
+            ds[y_dim] = list(range(len(ds[y_dim].values)))
+
+            # "stack" the dataset and convert to a dataframe
+            ds_df = ds.stack(
+                xy_index=(x_dim, y_dim),
+                create_index=False,
+            ).to_dataframe().drop(columns=[x_dim, y_dim]).reset_index()
+            del ds
+
+            # pivot the dataframe to have all point combo ids as columns
+            ds_df = ds_df.pivot(
+                index='time',
+                columns='xy_index',
+                values=variable,
+            )
+            ds_df.index.name = 'datetime'
+
+            # convert the dictionary to a dataframe
+            index_map = pd.DataFrame(
+                list(id_to_index.items()),
+                columns=['key', 'index'],
+            ).set_index('key')
+
+            # get the point indexes to query data with
+            point_indexes = index_map.loc[point_ids].values.flatten()
+            data = ds_df.loc[:, point_indexes].values
+            index = ds_df.index
+            del ds_df
+
+            # create your final dataframe
+            out_dfs.append(
+                pd.DataFrame(
+                    columns=point_ids,
+                    index=index,
+                    data=data,
+                ).sort_index(axis=1).sort_index(axis=0)
+            )
+            del data
+            del index
+            del index_map
+
+        out_df = pd.concat(
+            out_dfs,
+            axis=0,
         )
-        ds_df.index.name = 'datetime'
-
-        # convert the dictionary to a dataframe
-        index_map = pd.DataFrame(
-            list(id_to_index.items()),
-            columns=['key', 'index'],
-        ).set_index('key')
-
-        # get the point indexes to query data with
-        point_indexes = index_map.loc[point_ids].values.flatten()
-
-        # create your final dataframe
-        df = pd.DataFrame(
-            columns=point_ids,
-            index=ds_df.index,
-            data=(
-                ds_df.loc[:, point_indexes].values
-            ),
-        ).sort_index(axis=1).sort_index(axis=0)
+        del out_dfs
 
         # save to file
         if save_table_dir:
@@ -974,13 +1009,13 @@ class DataAccessor:
                 f'Saving df to {save_table_dir}, datetime={datetime.now()}'
             )
             table_path = self._save_dataframe(
-                df,
+                out_df,
                 variable=variable,
                 save_table_dir=save_table_dir,
                 save_table_suffix=save_table_suffix,
                 save_table_prefix=save_table_prefix,
             )
-            del df
+            del out_df
             return table_path
         else:
             return df
