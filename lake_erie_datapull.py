@@ -11,7 +11,7 @@ logging.basicConfig(
 
 LAKE_ERIE_DIR = Path(Path.cwd() / 'lake_erie_data/')
 AOI_SHP = Path(LAKE_ERIE_DIR / 'LEEM_boundary.shp')
-RESOLUTION = 100  # meters
+RESOLUTION = 50  # meters
 DATASET_NAME = 'reanalysis-era5-single-levels'
 VARIABLES = [
     '2m_temperature',
@@ -92,7 +92,8 @@ def main():
                 # get the data
                 logging.info(f'Getting and resampling data')
                 data_accessor.get_data(
-                    resolution_factor=100,
+                    resolution_factor=RESOLUTION,
+                    use_cds_only=True,
                 )
 
                 # convert data_to_table
