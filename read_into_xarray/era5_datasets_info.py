@@ -69,7 +69,7 @@ AWS_VARIABLES_DICT = {
     'snow_depth': 'lwe_thickness_of_surface_snow_amount',
     'surface_pressure': 'surface_air_pressure',
     'surface_solar_radiation_downwards': 'integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation',
-    'maximum_total_precipitation_rate_since_previous_post_processing': 'precipitation_amount_1hour_Accumulation',
+    'total_precipitation': 'precipitation_amount_1hour_Accumulation',
 }
 
 # all single level variables in both hourly and monthly data
