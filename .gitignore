@@ -6,4 +6,6 @@ __pycache__/
 **.gif
 .vscode/**
 **.parquet
-
+**.log
+.ipynb_checkpoints/**
+read_into_xarray/.ipynb_checkpoints/**
