@@ -63,8 +63,6 @@ MONTH_CHUNKS = {
 
 }
 
-# get data for a year at a time to avoid killing our memory
-
 
 def main():
     for i, var_list in enumerate([ELEMENT_VARS, NODES_VARS]):
@@ -75,44 +73,52 @@ def main():
                     f'Getting data for year={year}, month range={name}')
                 start_time = f'{months_chunk[0]}/{year}'
                 end_time = f'{months_chunk[1]}/{year}'
+                
+                # make sure we aren't overwriting
+                prefix = f'{name}_{year}_'
+                done_files = Path(OUT_DIRS[i]).iterdir()
+                done = False
+                for file in done_files:
+                    if prefix in file.name:
+                        done = True
+                if not done:
 
                 # init our data accessor
-                data_accessor = DataAccessor(
-                    dataset_name=DATASET_NAME,
-                    variables=var_list,
-                    start_time=start_time,
-                    end_time=end_time,
-                    coordinates=None,
-                    csv_of_coords=None,
-                    shapefile=AOI_SHP,
-                    raster=None,
-                    multithread=True,
-                )
+                    data_accessor = DataAccessor(
+                        dataset_name=DATASET_NAME,
+                        variables=var_list,
+                        start_time=start_time,
+                        end_time=end_time,
+                        coordinates=None,
+                        csv_of_coords=None,
+                        shapefile=AOI_SHP,
+                        raster=None,
+                        multithread=True,
+                    )
 
-                # get the data
-                logging.info(f'Getting and resampling data')
-                data_accessor.get_data(
-                    resolution_factor=RESOLUTION,
-                    use_cds_only=True,
-                )
+                    # get the data
+                    logging.info(f'Getting and resampling data')
+                    data_accessor.get_data(
+                        resolution_factor=RESOLUTION,
+                        use_cds_only=True,
+                    )
 
-                # convert data_to_table
-                logging.info('Saving data to .parquet')
-                prefix = f'{name}_{year}_'
-                data_accessor.get_data_tables(
-                    variables=var_list,
-                    csv_of_coords=pd.read_csv(CSVS[i]),
-                    coords_id_column=COL_IDS[i],
-                    save_table_dir=OUT_DIRS[i],
-                    save_table_prefix=prefix,
-                )
+                    # convert data_to_table
+                    logging.info('Saving data to .parquet')
+                    data_accessor.get_data_tables(
+                        variables=var_list,
+                        csv_of_coords=pd.read_csv(CSVS[i]),
+                        coords_id_column=COL_IDS[i],
+                        save_table_dir=OUT_DIRS[i],
+                        save_table_prefix=prefix,
+                    )
 
-                # remove temp files
-                data_accessor.unlock_and_clean()
+                    # remove temp files
+                    data_accessor.unlock_and_clean()
 
-                # delete the data accessor and clear memory
-                del data_accessor
-                gc.collect()
+                    # delete the data accessor and clear memory
+                    del data_accessor
+                    gc.collect()
 
 
 logging.shutdown()
