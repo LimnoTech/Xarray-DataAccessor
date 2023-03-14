@@ -1,6 +1,8 @@
 from read_into_xarray import DataAccessor
 import logging
 import gc
+import pandas as pd
+import numpy as np
 from pathlib import Path
 logging.basicConfig(
     filename='brazil_data_pull.log',
@@ -73,6 +75,37 @@ def main():
         # delete the data accessor and clear memory
         del data_accessor
         gc.collect()
+
+    # save to csv
+    year_dfs = []
+    for year in range(2017, 2023):
+        year_dfs.append(
+            pd.read_parquet(
+                BRAZIL_DIR / f'{year}_convective_precipitation.parquet')
+        )
+    data_df = pd.concat(year_dfs, axis=0)
+
+    # group by day
+    day_data_df = data_df.groupby(pd.Grouper(freq='D')).mean()
+
+    # add lat lon
+    day_data_df['lat'] = np.array(
+        [COORDS[0][0] for i in list(day_data_df.index)]
+    )
+    day_data_df['lon'] = np.array(
+        [COORDS[0][1] for i in list(day_data_df.index)]
+    )
+    day_data_df = day_data_df.rename(
+        columns={'1': 'convective_precipitation_meters'})
+
+    try:
+        # save to csv
+        OUT_DIR = Path(
+            'M:\Proposals\Proposals_2022\Small_Proposals\Associacao_Caatinga_Brazil'
+        )
+        day_data_df.to_csv(OUT_DIR / 'brazil_precip_data_pull.csv')
+    except Exception:
+        day_data_df.to_csv(BRAZIL_DIR / 'brazil_precip_data_pull.csv')
 
 
 if __name__ == '__main__':
