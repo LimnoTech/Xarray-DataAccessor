@@ -15,35 +15,39 @@ class DaskClass:
     ) -> None:
 
         # make sure a dask class is not already running
-        DaskClass.dask_classes = [
-            c for c in DaskClass.dask_classes if c.client.status == 'running'
-        ]
-
+        #DaskClass.dask_classes = [
+        #    c for c in DaskClass.dask_classes if c.client.status == 'running'
+        #]
+        # hashed out as a client can be closed but a cluster can persist
+        from dask.distributed import Client, LocalCluster, as_completed
+        
         # close all but one if multiple are running
         if len(DaskClass.dask_classes) > 1:
             warnings.warn('Multiple dask clients were running!')
             for c in DaskClass.dask_classes[:-1]:
-                c.close()
+                c.client.close()
+                c.cluster.close()
 
         # force closure if we want to change parameters
         if close_existing_client and len(DaskClass.dask_classes) > 0:
-            DaskClass.dask_classes[0].close()
+            DaskClass.dask_classes[-1].client.close()
+            DaskClass.dask_classes[-1].cluster.close()
             DaskClass.dask_classes = []
 
         # if one is running
         if len(DaskClass.dask_classes) > 0:
-            dask_class = DaskClass.dask_classes[0]
+            dask_class = DaskClass.dask_classes[-1]
             self.cluster = dask_class.cluster
-            self.client = dask_class.client
+            self.client = Client(self.cluster)
             self.as_completed = dask_class.as_completed
 
         # controls it as threading, with one thread per N workers
         else:
-            from dask.distributed import Client, LocalCluster, as_completed
             self.cluster = LocalCluster(
                 n_workers=n_workers,
                 threads_per_worker=threads_per_worker,
                 processes=processes,
+                dashboard_address=':8787',
             )
             self.client = Client(self.cluster)
             self.as_completed = as_completed

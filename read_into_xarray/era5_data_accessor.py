@@ -262,7 +262,7 @@ class AWSDataAccessor:
                     logging.warning(
                         f'Exception hit!: {e}'
                     )
-
+            client.close()
         for variable in variables:
             var_dict = data_dicts[variable]
 
@@ -637,7 +637,7 @@ class CDSDataAccessor:
                 all_data_dict[variable] = ds.rename(
                     {list(ds.data_vars)[0]: variable},
                 )
-
+            client.close()
         return all_data_dict
 
 

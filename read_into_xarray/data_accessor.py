@@ -1018,7 +1018,7 @@ class DataAccessor:
             del out_df
             return table_path
         else:
-            return df
+            return out_df
 
     def get_data_tables(
         self,
