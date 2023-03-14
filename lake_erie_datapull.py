@@ -69,8 +69,6 @@ def main():
         logging.info(f'Getting data for {var_list}')
         for year in range(2011, 2022):
             for name, months_chunk in MONTH_CHUNKS.items():
-                logging.info(
-                    f'Getting data for year={year}, month range={name}')
                 start_time = f'{months_chunk[0]}/{year}'
                 end_time = f'{months_chunk[1]}/{year}'
                 
@@ -82,6 +80,9 @@ def main():
                     if prefix in file.name:
                         done = True
                 if not done:
+                    logging.info(
+                        f'Getting data for year={year}, month range={name}'
+                    )
 
                 # init our data accessor
                     data_accessor = DataAccessor(
