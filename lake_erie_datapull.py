@@ -48,29 +48,114 @@ CSVS = [
 ]
 OUT_DIRS = [ELEMENTS_DIR, NODES_DIR]
 MONTH_CHUNKS = {
-    'jan': ('1/01', '1/31'),
-    'feb': ('2/01', '2/28'),
-    'mar': ('3/01', '3/31'),
-    'apr': ('4/01', '4/30'),
-    'may': ('5/01', '5/31'),
-    'jun': ('6/01', '6/30'),
-    'jul': ('7/01', '7/31'),
-    'aug': ('8/01', '8/31'),
-    'sep': ('9/01', '9/30'),
-    'oct': ('10/01', '10/31'),
-    'nov': ('11/01', '11/30'),
-    'dec': ('12/01', '12/31'),
-
+    'jan': ('1/01', '2/01'),
+    'feb': ('2/01', '3/01'),
+    'mar': ('3/01', '4/01'),
+    'apr': ('4/01', '5/01'),
+    'may': ('5/01', '6/01'),
+    'jun': ('6/01', '7/01'),
+    'jul': ('7/01', '8/01'),
+    'aug': ('8/01', '9/01'),
+    'sep': ('9/01', '10/01'),
+    'oct': ('10/01', '11/01'),
+    'nov': ('11/01', '12/01'),
+    'dec': ('12/01', '1/01'),
 }
+
+
+def reorder_columns(df: pd.DataFrame) -> pd.Index:
+    """
+    Returns columns reordered where datetime is the first, and the rest are numeric.
+
+    NOTE: this is specific for this exact use case.
+
+    """
+    # reorder the integer columns and turn back to strings
+    int_cols = df.columns[1:].astype('int').sort_values()
+    reordered_ints = int_cols.astype('str')
+    del int_cols
+    del df
+
+    # use Index.append() to add datetime back to the start
+    return pd.Index(['datetime']).append(reordered_ints)
+
+
+def convert_to_csvs(
+    data_dir: Path,
+    var_names: list[str],
+    months: list[str],
+    csv_prefix: str,
+    reorder: bool = True,
+) -> None:
+    """Combines parquets into a single massive CSV"""
+    logging.info(f'Combining all .parquet files in {data_dir}')
+    var_parquets = {}
+    for var in var_names:
+        ordered_parquets = []
+        for year in range(2011, 2022):
+            for month in months:
+                ordered_parquets.append(
+                    data_dir / f'{month}_{year}_{var}.parquet'
+                )
+        var_parquets[var] = ordered_parquets
+
+    for var in list(var_parquets.keys()):
+        parquets = var_parquets[var]
+        out_path = data_dir / f'{csv_prefix}_{var}.csv',
+
+        logging.info(f'Making {out_path}')
+        var_df = None
+        columns_order = None
+
+        # combine all the parquet files into one DataFrame
+        for i, parquet in enumerate(parquets):
+
+            # get updated column order if desired
+            if reorder and columns_order is None:
+                columns_order = reorder_columns(
+                    pd.read_parquet(
+                        parquet,
+                        engine='pyarrow',
+                    )
+                )
+
+            # read in data
+            df = pd.read_parquet(
+                parquet,
+                engine='pyarrow',
+                columns=columns_order,
+            )
+            if i == 0:
+                var_df = df.copy()
+            else:
+                var_df = pd.concat([var_df, df])
+            del df
+            print(f'{i}/{len(parquets)} - Shape: {var_df.shape}')
+        print('Saving to CSV')
+        var_df.to_csv(
+            out_path,
+            chunksize=2000,
+        )
+        del var_df
 
 
 def main():
     for i, var_list in enumerate([ELEMENT_VARS, NODES_VARS]):
         logging.info(f'Getting data for {var_list}')
+
+        # iterate over years and months
         for year in range(2011, 2022):
             for name, months_chunk in MONTH_CHUNKS.items():
+
+                # adjust for december to make sure we are not missing days
+                if name != 'dec':
+                    end_year = year
+                else:
+                    end_year = year + 1
+
+                # get start and end times (note that the end is exclusive!)
                 start_time = f'{months_chunk[0]}/{year}'
-                end_time = f'{months_chunk[1]}/{year}'
+                end_time = f'{months_chunk[1]}/{end_year}'
 
                 # make sure we aren't overwriting
                 prefix = f'{name}_{year}_'
@@ -120,6 +205,24 @@ def main():
                     # delete the data accessor and clear memory
                     del data_accessor
                     gc.collect()
+
+    # combine ELEMENTS data into one giant CSV file
+    convert_to_csvs(
+        ELEMENTS_DIR,
+        ELEMENT_VARS,
+        list(MONTH_CHUNKS.keys()),
+        'ELEMENTS',
+        reorder=True,
+    )
+
+    # combine NODES data into one giant CSV file
+    convert_to_csvs(
+        NODES_DIR,
+        NODES_VARS,
+        list(MONTH_CHUNKS.keys()),
+        'NODES',
+        reorder=True,
+    )
 
 
 logging.shutdown()
