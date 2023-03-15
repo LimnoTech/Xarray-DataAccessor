@@ -71,7 +71,7 @@ def main():
             for name, months_chunk in MONTH_CHUNKS.items():
                 start_time = f'{months_chunk[0]}/{year}'
                 end_time = f'{months_chunk[1]}/{year}'
-                
+
                 # make sure we aren't overwriting
                 prefix = f'{name}_{year}_'
                 done_files = Path(OUT_DIRS[i]).iterdir()
