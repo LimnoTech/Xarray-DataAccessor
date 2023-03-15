@@ -7,5 +7,8 @@ __pycache__/
 .vscode/**
 **.parquet
 **.log
+lake_erie_data/elements_data/**
+lake_erie_data/nodes_data/**
+brazil_data/**
 .ipynb_checkpoints/**
 read_into_xarray/.ipynb_checkpoints/**
