@@ -42,7 +42,8 @@ def main(
 
         # reorder distributed!
         out_df = in_df.map_partitions(reindex_cols)
-        out_csv = out_df.to_csv(file.replace(tag, ''))
+        out_path = file.parent / file.name.replace(tag, '')
+        out_csv = out_df.to_csv(out_path)
         print(f'CSV saved @ {out_csv}')
 
     # shut down client/cluster
