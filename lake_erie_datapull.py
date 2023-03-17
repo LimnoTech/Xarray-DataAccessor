@@ -1,6 +1,7 @@
 import read_into_xarray
 from read_into_xarray import DataAccessor
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import gc
 import logging
@@ -71,7 +72,7 @@ def reorder_columns(df: pd.DataFrame) -> pd.Index:
 
     """
     # reorder the integer columns and turn back to strings
-    int_cols = df.columns[1:].astype('int').sort_values()
+    int_cols = df.columns.astype('int').sort_values()
     reordered_ints = int_cols.astype('str')
     del int_cols
     del df
@@ -86,6 +87,7 @@ def convert_to_csvs(
     months: list[str],
     csv_prefix: str,
     reorder: bool = True,
+    out_dir: Optional[Path] = None,
 ) -> None:
     """Combines parquets into a single massive CSV"""
     logging.info(f'Combining all .parquet files in {data_dir}')
@@ -99,9 +101,13 @@ def convert_to_csvs(
                 )
         var_parquets[var] = ordered_parquets
 
+    # get output directory
+    if out_dir is None:
+        out_dir = data_dir
+
     for var in list(var_parquets.keys()):
         parquets = var_parquets[var]
-        out_path = data_dir / f'{csv_prefix}_{var}.csv',
+        out_path = out_dir / f'{csv_prefix}_{var}.csv'
 
         logging.info(f'Making {out_path}')
         var_df = None
@@ -213,6 +219,7 @@ def main():
         list(MONTH_CHUNKS.keys()),
         'ELEMENTS',
         reorder=True,
+        #out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
     )
 
     # combine NODES data into one giant CSV file
@@ -222,6 +229,7 @@ def main():
         list(MONTH_CHUNKS.keys()),
         'NODES',
         reorder=True,
+        #out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
     )
 
 
