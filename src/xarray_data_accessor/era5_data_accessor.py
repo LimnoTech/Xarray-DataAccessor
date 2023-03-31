@@ -15,7 +15,6 @@ from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
 from xarray_data_accessor.era5_datasets_info import (
-    verify_dataset,
     DATASET_NAMES,
     AWS_VARIABLES_DICT,
     SINGLE_LEVEL_VARIABLES,

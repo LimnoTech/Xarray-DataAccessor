@@ -39,18 +39,6 @@ ERA5-land variables
 # data sources and dataset names
 DATASET_SOURCES = ('CDS', 'AWS')
 
-DATASET_NAMES = [
-    'reanalysis-era5-single-levels',
-    'reanalysis-era5-single-levels-preliminary-back-extension',
-    'reanalysis-era5-single-levels-monthly-means',
-    'reanalysis-era5-single-levels-monthly-means-preliminary-back-extension',
-    'reanalysis-era5-pressure-levels',
-    'reanalysis-era5-pressure-levels-monthly-means',
-    'reanalysis-era5-pressure-levels-preliminary-back-extension',
-    'reanalysis-era5-pressure-levels-monthly-means-preliminary-back-extension',
-    'reanalysis-era5-land',
-    'reanalysis-era5-land-monthly-means',
-]
 
 AWS_VARIABLES_DICT = {
     '10m_u_component_of_wind': 'eastward_wind_at_10_metres',
