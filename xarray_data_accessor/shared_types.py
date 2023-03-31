@@ -21,6 +21,14 @@ RasterInput = Union[str, Path, DataArray, Dataset]
 CoordsTuple = Tuple[float, float]  # lat/long
 ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
 
+PossibleAOIInputs = Union[
+    CoordsTuple,
+    List[CoordsTuple],
+    TableInput,
+    ShapefileInput,
+    RasterInput,
+]
+
 
 class BoundingBoxDict(TypedDict):
     west: float
@@ -37,8 +45,7 @@ class ResampleDict(TypedDict):
     index: int
 
 
-@abc.ABC
-class DataAccessorBase:
+class DataAccessorBase(abc.ABC):
 
     @abc.abstractmethod
     def __init__(

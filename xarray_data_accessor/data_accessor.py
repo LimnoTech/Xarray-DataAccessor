@@ -11,6 +11,7 @@ from xarray_data_accessor.shared_types import (
     RasterInput,
     TimeInput,
     TableInput,
+    PossibleAOIInputs,
     ResampleDict,
     DataAccessorBase,
 )
@@ -49,14 +50,6 @@ class InputDict(TypedDict):
 
 class DataAccessor:
     """Main class to get a data."""
-
-    PossibleAOIInputs = Union[
-        str,
-        Path,
-        CoordsTuple,
-        List[CoordsTuple],
-        xr.DataArray,
-    ]
 
     def __init__(
         self,
