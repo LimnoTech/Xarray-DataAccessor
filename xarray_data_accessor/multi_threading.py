@@ -15,12 +15,8 @@ class DaskClass:
     ) -> None:
 
         # make sure a dask class is not already running
-        #DaskClass.dask_classes = [
-        #    c for c in DaskClass.dask_classes if c.client.status == 'running'
-        #]
-        # hashed out as a client can be closed but a cluster can persist
         from dask.distributed import Client, LocalCluster, as_completed
-        
+
         # close all but one if multiple are running
         if len(DaskClass.dask_classes) > 1:
             warnings.warn('Multiple dask clients were running!')
