@@ -70,7 +70,7 @@ def main():
         )
 
         # remove temp files
-        data_accessor.unlock_and_clean()
+        data_accessor.delete_temp_files()
 
         # delete the data accessor and clear memory
         del data_accessor

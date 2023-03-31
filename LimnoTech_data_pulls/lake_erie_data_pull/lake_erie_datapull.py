@@ -206,7 +206,7 @@ def main():
                     )
 
                     # remove temp files
-                    data_accessor.unlock_and_clean()
+                    data_accessor.delete_temp_files()
 
                     # delete the data accessor and clear memory
                     del data_accessor
@@ -219,7 +219,7 @@ def main():
         list(MONTH_CHUNKS.keys()),
         'ELEMENTS',
         reorder=True,
-        #out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
+        # out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
     )
 
     # combine NODES data into one giant CSV file
@@ -229,7 +229,7 @@ def main():
         list(MONTH_CHUNKS.keys()),
         'NODES',
         reorder=True,
-        #out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
+        # out_dir=Path('X:\AAOWorking\LEEM2\Met_Data'),
     )
 
 
