@@ -11,4 +11,4 @@ lake_erie_data/elements_data/**
 lake_erie_data/nodes_data/**
 brazil_data/**
 .ipynb_checkpoints/**
-read_into_xarray/.ipynb_checkpoints/**
+xarray_data_accessor/.ipynb_checkpoints/**

@@ -1,5 +1,5 @@
-import read_into_xarray
-from read_into_xarray import DataAccessor
+import xarray_data_accessor
+from xarray_data_accessor import DataAccessor
 from pathlib import Path
 import geopandas as gpd
 import pandas as pd

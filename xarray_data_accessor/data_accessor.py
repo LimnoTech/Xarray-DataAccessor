@@ -2,7 +2,7 @@ import warnings
 import logging
 import itertools
 import multiprocessing
-from read_into_xarray.multi_threading import get_multithread
+from xarray_data_accessor.multi_threading import get_multithread
 from pathlib import Path
 from datetime import datetime
 from typing import (
@@ -187,7 +187,7 @@ class DataAccessor:
             # go thru each dataset and try to add their info module
             # TODO: this could be a factory implementation!
             try:
-                import read_into_xarray.era5_datasets_info as era5_datasets_info
+                import xarray_data_accessor.era5_datasets_info as era5_datasets_info
                 self._supported_datasets_info['ERA5'] = era5_datasets_info
             except ImportError:
                 pass
@@ -222,7 +222,7 @@ class DataAccessor:
     @staticmethod
     def _get_era5_accessor() -> object:
         try:
-            import read_into_xarray.era5_data_accessor as era5_data_accessor
+            import xarray_data_accessor.era5_data_accessor as era5_data_accessor
             return era5_data_accessor.ERA5DataAccessor
         except ImportError:
             raise ImportError(

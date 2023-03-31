@@ -1,4 +1,4 @@
-from read_into_xarray import DataAccessor
+from xarray_data_accessor import DataAccessor
 import logging
 import gc
 import pandas as pd

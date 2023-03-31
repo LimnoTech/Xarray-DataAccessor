@@ -1,5 +1,5 @@
-from read_into_xarray.data_accessor import BoundingBoxDict
-from read_into_xarray.multi_threading import DaskClass, get_multithread
+from xarray_data_accessor.data_accessor import BoundingBoxDict
+from xarray_data_accessor.multi_threading import DaskClass, get_multithread
 from typing import (
     Dict,
     Tuple,
@@ -8,7 +8,7 @@ from typing import (
     Optional,
     TypedDict,
 )
-from read_into_xarray.era5_datasets_info import (
+from xarray_data_accessor.era5_datasets_info import (
     verify_dataset,
     DATASET_NAMES,
     AWS_VARIABLES_DICT,

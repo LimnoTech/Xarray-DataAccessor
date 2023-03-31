@@ -1,13 +1,13 @@
-from read_into_xarray import (
+from xarray_data_accessor import (
     data_accessor,
 )
-from read_into_xarray.data_accessor import (
+from xarray_data_accessor.data_accessor import (
     DataAccessor,
 )
 
 # optional
 try:
-    from read_into_xarray import (
+    from xarray_data_accessor import (
         era5_data_accessor,
         era5_datasets_info,
     )
