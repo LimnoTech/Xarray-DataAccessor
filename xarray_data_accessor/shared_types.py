@@ -1,5 +1,4 @@
 import abc
-import xarray as xr
 from typing import (
     List,
     Tuple,
@@ -8,12 +7,17 @@ from typing import (
     TypedDict,
 )
 from datetime import datetime
+from xarray import DataArray, Dataset
 from rasterio.crs import CRS
 from geopandas import GeoDataFrame
+from pandas import DataFrame
 from pathlib import Path
 from xarray_data_accessor.shared_types import BoundingBoxDict
 
-Shapefile = Union[str, Path, GeoDataFrame]
+TimeInput = Union[datetime, str, int]
+TableInput = Union[str, Path, DataFrame]
+ShapefileInput = Union[str, Path, GeoDataFrame]
+RasterInput = Union[str, Path, DataArray, Dataset]
 CoordsTuple = Tuple[float, float]  # lat/long
 ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
 
@@ -31,12 +35,6 @@ class ResampleDict(TypedDict):
     resampling_method: str
     crs: CRS
     index: int
-
-
-class DataGrabberDict(TypedDict):
-    point_data: xr.Dataset
-    point_ids: List[str]
-    xy_dims: Tuple[str, str]
 
 
 @abc.ABC
@@ -77,7 +75,7 @@ class DataAccessorBase:
         end_dt: datetime,
         bbox: BoundingBoxDict,
         **kwargs,
-    ) -> xr.Dataset:
+    ) -> Dataset:
         """Gathers the desired variables for ones time/space AOI.
 
         Arguments:

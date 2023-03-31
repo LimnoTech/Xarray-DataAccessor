@@ -746,7 +746,10 @@ class ERA5DataAccessor(DataAccessorBase):
             self.specific_hours = None
 
         # bring in dataset name
-        verify_dataset(dataset_name)
+        if dataset_name not in DATASET_NAMES:
+            raise ValueError(
+                f'param:dataset_name must be in {DATASET_NAMES}!'
+            )
         self.dataset_name = dataset_name
 
         # control multithreading

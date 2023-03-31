@@ -478,13 +478,3 @@ MISSING_HOURLY_VARIABLES = [
     'magnitude_of_turbulent_surface_stress',
     'mean_magnitude_of_turbulent_surface_stress',
 ]
-
-
-def verify_dataset(
-    dataset_name: str,
-) -> None:
-
-    if dataset_name not in DATASET_NAMES:
-        raise ValueError(
-            f'param:dataset_name must be in {DATASET_NAMES}!'
-        )

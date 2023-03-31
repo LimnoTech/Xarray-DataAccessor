@@ -1,17 +1,18 @@
 import warnings
 import logging
 import itertools
-import multiprocessing
-from xarray_data_accessor.multi_threading import get_multithread
 from pathlib import Path
 from datetime import datetime
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
     CoordsTuple,
     ResolutionTuple,
-    Shapefile,
+    ShapefileInput,
+    RasterInput,
+    TimeInput,
+    TableInput,
     ResampleDict,
-    DataGrabberDict,
+    DataAccessorBase,
 )
 from typing import (
     Optional,
@@ -33,13 +34,17 @@ try:
     DASK_DISTRIBUTE = True
 except ImportError:
     DASK_DISTRIBUTE = False
-try:
-    import geopandas as gpd
-    HAS_GEOPANDAS = True
 
-except ImportError:
-    HAS_GEOPANDAS = False
-    Shapefile = Union[str, Path]
+
+class InputDict(TypedDict):
+    """Stores all internal inputs to the DataAccessor."""
+    dataset_name: str
+    aoi_input_type: str
+    bounding_box: BoundingBoxDict
+    start_datetime: datetime
+    end_datetime: datetime
+    variables: List[str]
+    multithreading: bool
 
 
 class DataAccessor:
@@ -57,12 +62,12 @@ class DataAccessor:
         self,
         dataset_name: str,
         variables: Union[str, List[str]],
-        start_time: Union[datetime, str, int],
-        end_time: Union[datetime, str, int],
+        start_time: TimeInput,
+        end_time: TimeInput,
         coordinates: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
-        csv_of_coords: Optional[Union[str, Path]] = None,
-        shapefile: Optional[Union[str, Path]] = None,
-        raster: Optional[Union[str, Path, xr.DataArray]] = None,
+        csv_of_coords: Optional[TableInput] = None,
+        shapefile: Optional[ShapefileInput] = None,
+        raster: Optional[RasterInput] = None,
         multithread: bool = True,
         use_dask: bool = DASK_DISTRIBUTE,
     ) -> None:
@@ -158,9 +163,9 @@ class DataAccessor:
             f'Use ERA5DataAccessor.inputs_dict to verify your inputs.'
         )
 
-    # STATIC HELPER METHODS ####################################################
+    # Static Helper Functions ####################################################
     @staticmethod
-    def _get_era5_accessor() -> object:
+    def _get_era5_accessor() -> DataAccessorBase:
         # TODO: change to a factory implementation
         try:
             import xarray_data_accessor.era5_data_accessor as era5_data_accessor
@@ -172,7 +177,7 @@ class DataAccessor:
             )
 
     @staticmethod
-    def _get_datetime(input_date: Union[str, datetime, int]) -> datetime:
+    def _get_datetime(input_date: TimeInput) -> datetime:
         """Returns a datetime object from a variety of inputs."""
         if isinstance(input_date, datetime):
             return input_date
@@ -223,7 +228,7 @@ class DataAccessor:
 
     @staticmethod
     def _bbox_from_coords_csv(
-        csv: Union[str, Path, pd.DataFrame],
+        csv: TableInput,
     ) -> BoundingBoxDict:
         """Gets the bounding box from a csv/dataframe of coordinates."""
         # TODO : make method
@@ -231,13 +236,13 @@ class DataAccessor:
 
     @staticmethod
     def _bbox_from_shp(
-        shapefile: Shapefile,
+        shapefile: ShapefileInput,
     ) -> BoundingBoxDict:
         """Gets the bounding box from a shapefile."""
-        if not HAS_GEOPANDAS:
-            raise ImportError(
-                f'To create a bounding box from shapefile you need geopandas installed!'
-            )
+        # make sure we have geopandas
+        if 'gpd' not in dir():
+            import geopandas as gpd
+
         if isinstance(shapefile, gpd.GeoDataFrame):
             geo_df = shapefile
         else:
@@ -267,7 +272,7 @@ class DataAccessor:
 
     @staticmethod
     def _bbox_from_raster(
-        raster: Union[str, Path, xr.DataArray],
+        raster: RasterInput,
     ) -> BoundingBoxDict:
         """Gets the bounding box from a raster."""
 
@@ -327,7 +332,7 @@ class DataAccessor:
         }
 
     @property
-    def supported_accessors(self) -> Dict[str, object]:
+    def supported_accessors(self) -> Dict[str, DataAccessorBase]:
         """
         Returns the DataAccessor object for each dataset.
         """
@@ -350,19 +355,18 @@ class DataAccessor:
     @property
     def inputs_dict(
         self,
-    ) -> Dict[str, Union[str, Dict[str, float], datetime, List[str]]]:
+    ) -> InputDict:
         return {
-            'Dataset name': self.dataset_name,
-            'Dataset source': self.dataset_source,
-            'AOI type': self.aoi_input_type,
-            'AOI bounding box': self.bbox,
-            'Start datetime': self.start_dt,
-            'End datetime': self.end_dt,
-            'Variables': self.variables,
-            'Multithreading': str(self.multithread),
+            'dataset_name': self.dataset_name,
+            'aoi_input_type': self.aoi_input_type,
+            'bounding_box': self.bbox,
+            'start_datetime': self.start_dt,
+            'end_datetime': self.end_dt,
+            'variables': self.variables,
+            'multithreading': str(self.multithread),
         }
 
-    # Methods #################################################################
+    # Non-Core Methods #########################################################
     def get_bounding_box(
         self,
         aoi_input_type: str,
@@ -474,7 +478,6 @@ class DataAccessor:
         resolution_factor: Optional[Union[int, float]] = None,
         xy_resolution_factors: Optional[ResolutionTuple] = None,
         chunk_dict: Optional[Dict[str, int]] = None,
-        dont_chunk: bool = False,
         **kwargs,
     ) -> xr.Dataset:
         """Main function to get data. Updated self.xarray_dataset
@@ -484,7 +487,6 @@ class DataAccessor:
             :param resolution_factor: The factor to resample the dataset by.
             :param xy_resolution_factors: The factors to resample the dataset by for X/Y dimensions.
             :param chunk_dict: A dictionary of chunk sizes for each dimension.
-            :param dont_chunk: If True, will not chunk the dataset.
             :param kwargs: Keyword arguments to pass to the data accessor.
 
         Return:
@@ -550,7 +552,7 @@ class DataAccessor:
         self,
         variables: Optional[List[str]] = None,
         coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
-        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        csv_of_coords: Optional[TableInput] = None,
         coords_id_column: Optional[str] = None,
         xy_columns: Optional[Tuple[str, str]] = None,
         save_table_dir: Optional[Union[str, Path]] = None,
@@ -685,7 +687,7 @@ class DataAccessor:
                 ),
             )
 
-    # UTILITY FUNCTIONS ########################################################
+    # Utility Functions ########################################################
     def _resample_slice(
         self,
         data: xr.Dataset,
@@ -744,7 +746,7 @@ class DataAccessor:
 
     def _get_coords_df(
         self,
-        csv_of_coords: Optional[Union[str, Path, pd.DataFrame]] = None,
+        csv_of_coords: Optional[TableInput] = None,
         coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
         coords_id_column: Optional[str] = None,
     ) -> pd.DataFrame:
