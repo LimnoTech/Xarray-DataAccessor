@@ -9,8 +9,11 @@ from typing import (
 )
 from datetime import datetime
 from rasterio.crs import CRS
+from geopandas import GeoDataFrame
+from pathlib import Path
 from xarray_data_accessor.shared_types import BoundingBoxDict
 
+Shapefile = Union[str, Path, GeoDataFrame]
 CoordsTuple = Tuple[float, float]  # lat/long
 ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
 

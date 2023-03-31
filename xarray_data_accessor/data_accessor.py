@@ -5,6 +5,14 @@ import multiprocessing
 from xarray_data_accessor.multi_threading import get_multithread
 from pathlib import Path
 from datetime import datetime
+from xarray_data_accessor.shared_types import (
+    BoundingBoxDict,
+    CoordsTuple,
+    ResolutionTuple,
+    Shapefile,
+    ResampleDict,
+    DataGrabberDict,
+)
 from typing import (
     Optional,
     Tuple,
@@ -18,7 +26,6 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 from rasterio.enums import Resampling
-from rasterio.crs import CRS
 
 # control weather to use dask for xarray computation
 try:
@@ -29,34 +36,10 @@ except ImportError:
 try:
     import geopandas as gpd
     HAS_GEOPANDAS = True
-    Shapefile = Union[str, Path, gpd.GeoDataFrame]
+
 except ImportError:
     HAS_GEOPANDAS = False
     Shapefile = Union[str, Path]
-
-CoordsTuple = Tuple[float, float]  # lat/long
-ResolutionTuple = Tuple[Union[int, float], Union[int, float]]
-
-
-class BoundingBoxDict(TypedDict):
-    west: float
-    south: float
-    east: float
-    north: float
-
-
-class ResampleDict(TypedDict):
-    width: int
-    height: int
-    resampling_method: str
-    crs: CRS
-    index: int
-
-
-class DataGrabberDict(TypedDict):
-    point_data: xr.Dataset
-    point_ids: List[str]
-    xy_dims: Tuple[str, str]
 
 
 class DataAccessor:
@@ -315,24 +298,27 @@ class DataAccessor:
 
     @staticmethod
     def _bbox_from_shp(
-        shapefile: Union[str, Path],
+        shapefile: Shapefile,
     ) -> BoundingBoxDict:
         if not HAS_GEOPANDAS:
             raise ImportError(
                 f'To create a bounding box from shapefile you need geopandas installed!'
             )
-        if isinstance(shapefile, str):
-            shapefile = Path(shapefile)
-        if not shapefile.exists():
-            raise FileNotFoundError(
-                f'Input path {shapefile} is not found.')
-        if not shapefile.suffix == '.shp':
-            raise ValueError(
-                f'Input path {shapefile} is not a .shp file!'
-            )
+        if isinstance(shapefile, gpd.GeoDataFrame):
+            geo_df = shapefile
+        else:
+            if isinstance(shapefile, str):
+                shapefile = Path(shapefile)
+            if not shapefile.exists():
+                raise FileNotFoundError(
+                    f'Input path {shapefile} is not found.')
+            if not shapefile.suffix == '.shp':
+                raise ValueError(
+                    f'Input path {shapefile} is not a .shp file!'
+                )
+            geo_df = gpd.read_file(shapefile)
 
         # read GeoDataFrame and reproject if necessary
-        geo_df = gpd.read_file(shapefile)
         if geo_df.crs.to_epsg() != 4326:
             geo_df = geo_df.to_crs(4326)
         west, south, east, north = geo_df.geometry.total_bounds

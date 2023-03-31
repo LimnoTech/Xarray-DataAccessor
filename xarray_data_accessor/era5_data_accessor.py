@@ -761,7 +761,7 @@ class ERA5DataAccessor(DataAccessorBase):
         )
         self.all_possible_variables = self.cds_data_accessor.possible_variables()
 
-        if self.dataset_name in AWSDataAccessor.supported_datasets and not use_cds_only:
+        if self.dataset_name in AWSDataAccessor.supported_datasets and not self.use_cds_only:
             self.use_aws = True
             self.aws_data_accessor = AWSDataAccessor(
                 dataset_name=self.dataset_name,
