@@ -1,5 +1,7 @@
-from xarray_data_accessor.data_accessor import BoundingBoxDict
-from xarray_data_accessor.multi_threading import DaskClass, get_multithread
+from xarray_data_accessor.multi_threading import (
+    DaskClass,
+    get_multithread,
+)
 from typing import (
     Dict,
     Tuple,
@@ -7,6 +9,10 @@ from typing import (
     Union,
     Optional,
     TypedDict,
+)
+from xarray_data_accessor.shared_types import (
+    DataAccessorBase,
+    BoundingBoxDict,
 )
 from xarray_data_accessor.era5_datasets_info import (
     verify_dataset,
@@ -35,6 +41,8 @@ import xarray as xr
 import os
 os.environ["XARRAY_GH_CONFIGURE_WITH_CFGRIB"] = "0"
 
+# define types for AWS data access
+
 
 class AWSRequestDict(TypedDict):
     variable: str
@@ -45,6 +53,57 @@ class AWSRequestDict(TypedDict):
 
 class AWSResponseDict(AWSRequestDict):
     dataset: xr.Dataset
+
+# define functions that are used by both AWS and CDS data accessors
+
+
+def _prep_small_bbox(
+    bbox: BoundingBoxDict,
+) -> BoundingBoxDict:
+    """Converts a single point bbox to a small bbox with 0.1 degree sides"""
+    if bbox['north'] == bbox['south']:
+        bbox['north'] += 0.05
+        bbox['south'] -= 0.05
+    if bbox['east'] == bbox['west']:
+        bbox['east'] += 0.05
+        bbox['west'] -= 0.05
+    return bbox
+
+
+def _round_to_nearest(
+    number: float,
+    shift_up: bool,
+) -> float:
+    """Rounds number to nearest 0.25. Either shifts up or down."""
+    num = round((number * 4)) / 4
+    if shift_up:
+        if num < number:
+            num += 0.25
+    else:
+        if num > number:
+            num -= 0.25
+    return num
+
+
+def _standardize_bbox(
+    bbox: BoundingBoxDict,
+) -> BoundingBoxDict:
+    """
+    Converts a bbox to the nearest 0.25 increments.
+
+    NOTE: This is used when combining CDS and AWS data since CDS API returns
+        data at 0.25 increments starting/stopping at the exact bbox coords.
+        In contrast, AWS returns all data in 0.25 increments for the whole 
+        globe and is converted via AWSDataAccessor._crop_aws_data().
+    """
+    out_bbox = {}
+
+    out_bbox['west'] = _round_to_nearest(bbox['west'], shift_up=False)
+    out_bbox['south'] = _round_to_nearest(bbox['south'], shift_up=False)
+    out_bbox['east'] = _round_to_nearest(bbox['east'], shift_up=True)
+    out_bbox['north'] = _round_to_nearest(bbox['north'], shift_up=True)
+
+    return out_bbox
 
 
 class AWSDataAccessor:
@@ -104,7 +163,7 @@ class AWSDataAccessor:
     ) -> xr.Dataset:
         """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
         # make sure we have inclusive bounds at 0.25
-        std_bbox = ERA5DataAccessor._standardize_bbox(bbox)
+        std_bbox = _standardize_bbox(bbox)
         x_bounds = np.array([std_bbox['west'], std_bbox['east']])
         y_bounds = np.array([std_bbox['south'], std_bbox['north']])
 
@@ -641,14 +700,12 @@ class CDSDataAccessor:
         return all_data_dict
 
 
-class ERA5DataAccessor:
+class ERA5DataAccessor(DataAccessorBase):
+    """Class for accessing ERA5 data."""
 
     def __init__(
         self,
         dataset_name: str,
-        use_dask: bool = False,
-        use_cds_only: bool = False,
-        file_format: str = 'netcdf',
         **kwargs,
     ) -> None:
         """Accessor class for ERA5 data. Uses both AWS and CDS endpoints.
@@ -669,18 +726,24 @@ class ERA5DataAccessor:
         """
         # init multithreading
         self.cores = int(multiprocessing.cpu_count())
-        self.use_dask = use_dask
 
-        # set file format (checking it is handled in CDSDataAccessor)
-        self.file_format = file_format
-
-        # access kwargs
+        # access kwargs to override defaults
         if 'use_dask' in kwargs['kwargs'].keys():
-            use_dask = kwargs['kwargs']['use_dask']
+            self.use_dask = kwargs['kwargs']['use_dask']
+        else:
+            self.use_dask = True
         if 'use_cds_only' in kwargs['kwargs'].keys():
-            use_cds_only = kwargs['kwargs']['use_cds_only']
+            self.use_cds_only = kwargs['kwargs']['use_cds_only']
+        else:
+            self.use_cds_only = False
         if 'file_format' in kwargs['kwargs'].keys():
-            file_format = kwargs['kwargs']['file_format']
+            self.file_format = kwargs['kwargs']['file_format']
+        else:
+            self.file_format = 'netcdf'
+        if 'specific_hours' in kwargs['kwargs'].keys():
+            self.specific_hours = kwargs['kwargs']['specific_hours']
+        else:
+            self.specific_hours = None
 
         # bring in dataset name
         verify_dataset(dataset_name)
@@ -694,7 +757,7 @@ class ERA5DataAccessor:
         self.cds_data_accessor = CDSDataAccessor(
             dataset_name=self.dataset_name,
             thread_limit=self.cores,
-            file_format=file_format,
+            file_format=self.file_format,
         )
         self.all_possible_variables = self.cds_data_accessor.possible_variables()
 
@@ -712,80 +775,13 @@ class ERA5DataAccessor:
             self.use_aws = False
 
     @property
-    def dataset_accessors(self) -> Dict[str, object]:
+    def data_source_classes(self) -> Dict[str, object]:
         return {
             'AWS': AWSDataAccessor,
             'CDS': ERA5DataAccessor,
         }
 
-    @staticmethod
-    def _prep_small_bbox(
-        bbox: BoundingBoxDict,
-    ) -> BoundingBoxDict:
-        """Converts a single point bbox to a small bbox with 0.1 degree sides"""
-        if bbox['north'] == bbox['south']:
-            bbox['north'] += 0.05
-            bbox['south'] -= 0.05
-        if bbox['east'] == bbox['west']:
-            bbox['east'] += 0.05
-            bbox['west'] -= 0.05
-        return bbox
-
-    @staticmethod
-    def _round_to_nearest(
-        number: float,
-        shift_up: bool,
-    ) -> float:
-        """Rounds number to nearest 0.25. Either shifts up or down."""
-        num = round((number * 4)) / 4
-        if shift_up:
-            if num < number:
-                num += 0.25
-        else:
-            if num > number:
-                num -= 0.25
-        return num
-
-    @staticmethod
-    def _standardize_bbox(
-        bbox: BoundingBoxDict,
-    ) -> BoundingBoxDict:
-        """
-        Converts a bbox to the nearest 0.25 increments.
-
-        NOTE: This is used when combining CDS and AWS data since CDS API returns
-            data at 0.25 increments starting/stopping at the exact bbox coords.
-            In contrast, AWS returns all data in 0.25 increments for the whole 
-            globe and is converted via AWSDataAccessor._crop_aws_data().
-        """
-        out_bbox = {}
-
-        def _round_to_nearest(
-            number: float,
-            shift_up: bool,
-        ) -> float:
-            """Rounds number to nearest 0.25. Either shifts up or down."""
-            num = round((number * 4)) / 4
-            if shift_up:
-                if num < number:
-                    num += 0.25
-            else:
-                if num > number:
-                    num -= 0.25
-            return num
-
-        out_bbox['west'] = _round_to_nearest(bbox['west'], shift_up=False)
-        out_bbox['south'] = _round_to_nearest(bbox['south'], shift_up=False)
-        out_bbox['east'] = _round_to_nearest(bbox['east'], shift_up=True)
-        out_bbox['north'] = _round_to_nearest(bbox['north'], shift_up=True)
-
-        return out_bbox
-
-    def _write_attrs(
-        self,
-        cds_variables: List[str],
-        aws_variables: List[str],
-    ) -> dict:
+    def _write_attrs(self) -> dict:
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
 
@@ -802,8 +798,8 @@ class ERA5DataAccessor:
         attrs['time_step'] = 'hourly'
 
         # write attrs storing variable source info
-        attrs['Data from CDS API'] = cds_variables
-        attrs['Data from Planet OS AWS S3 bucket'] = aws_variables
+        attrs['Data from CDS API'] = self.cds_variables
+        attrs['Data from Planet OS AWS S3 bucket'] = self.aws_variables
         return attrs
 
     def get_data(
@@ -812,7 +808,6 @@ class ERA5DataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
-        specific_hours: Optional[List[int]] = None,
     ) -> xr.Dataset:
         """Gathers the desired variables for ones time/space AOI.
 
@@ -840,25 +835,25 @@ class ERA5DataAccessor:
         cant_add_variables = []
 
         # prep bbox
-        bbox = self._prep_small_bbox(bbox)
+        bbox = _prep_small_bbox(bbox)
 
         # see which variables can be fetched from AWS
-        aws_variables = []
-        cds_variables = []
+        self.aws_variables = []
+        self.cds_variables = []
         if self.use_aws:
-            aws_variables = [
+            self.aws_variables = [
                 i for i in variables if i in self.aws_data_accessor.possible_variables()
             ]
-            accessor_variables_mapper[self.aws_data_accessor] = aws_variables
+            accessor_variables_mapper[self.aws_data_accessor] = self.aws_variables
 
         # map remaining variables to CDS
-        if not len(aws_variables) == len(variables):
-            for var in [i for i in variables if i not in aws_variables]:
+        if not len(self.aws_variables) == len(variables):
+            for var in [i for i in variables if i not in self.aws_variables]:
                 if var in self.cds_data_accessor.possible_variables():
-                    cds_variables.append(var)
+                    self.cds_variables.append(var)
                 else:
                     cant_add_variables.append(var)
-            accessor_variables_mapper[self.cds_data_accessor] = cds_variables
+            accessor_variables_mapper[self.cds_data_accessor] = self.cds_variables
 
         # init a dictionary to store outputs
         datasets_dict = {}
@@ -866,8 +861,8 @@ class ERA5DataAccessor:
             datasets_dict[var] = None
 
         # if using both CDS and AWS, convert bbox to 0.25 increments
-        if len(cds_variables) > 0 and len(aws_variables) > 0:
-            bbox = self._standardize_bbox(bbox)
+        if len(self.cds_variables) > 0 and len(self.aws_variables) > 0:
+            bbox = _standardize_bbox(bbox)
 
         # get the data from both sources
         for accessor, vars in accessor_variables_mapper.items():
@@ -879,7 +874,7 @@ class ERA5DataAccessor:
                         end_dt=end_dt,
                         bbox=bbox,
                         use_dask=self.use_dask,
-                        specific_hours=specific_hours,
+                        specific_hours=self.specific_hours,
                     ),
                 )
             except TypeError as e:
@@ -888,10 +883,7 @@ class ERA5DataAccessor:
                 )
 
         # make an updates attributes dictionary
-        attrs_dict = self._write_attrs(
-            cds_variables,
-            aws_variables,
-        )
+        attrs_dict = self._write_attrs()
 
         # remove and warn about NoneType responses
         del_keys = []
