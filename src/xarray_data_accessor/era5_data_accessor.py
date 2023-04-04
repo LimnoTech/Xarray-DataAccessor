@@ -360,7 +360,6 @@ class CDSDataAccessor:
         'grib': '.grib',
     }
 
-    supported_datasets = DATASET_NAMES
     institution = 'ECMWF'
 
     def __init__(

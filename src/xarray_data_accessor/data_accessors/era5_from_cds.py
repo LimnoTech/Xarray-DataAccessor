@@ -131,6 +131,7 @@ class CDSDataAccessor:
     def _write_attrs(
         self,
         dataset_name: str,
+        **kwargs,
     ) -> Dict[str, Number]:
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
