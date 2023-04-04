@@ -30,6 +30,17 @@ PossibleAOIInputs = Union[
 ]
 
 
+class InputDict(TypedDict):
+    """Stores all internal inputs to the DataAccessor."""
+    dataset_name: str
+    aoi_input_type: str
+    bounding_box: BoundingBoxDict
+    start_datetime: datetime
+    end_datetime: datetime
+    variables: List[str]
+    multithreading: bool
+
+
 class BoundingBoxDict(TypedDict):
     west: float
     south: float
