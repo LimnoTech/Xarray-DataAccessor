@@ -24,10 +24,10 @@ from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
     ResolutionTuple,
 )
-from xarray_data_accessor import (
-    utility_functions,
+from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
 )
+from xarray_data_accessor import utility_functions
 
 
 def get_xarray_dataset(
@@ -50,9 +50,9 @@ def get_xarray_dataset(
     """
     Arguments:
         :param data_accessor_name: A valid/supported data_accessor_name.
-            NOTE: see DataAccessorFactory.data_accessor_names.
+            NOTE: see DataAccessorFactory.data_accessor_names().
         :param dataset_name: A valid/supported dataset_name.
-            NOTE: see DataAccessorFactory.supported_datasets for a mapping
+            NOTE: see DataAccessorFactory.supported_datasets() for a mapping
             of data accessor names to supported dataset names.
         :param variables: A list of variables from param:dataset_name.
             NOTE: use DataAccessorFactory.supported_variables() for a mapping
@@ -74,10 +74,10 @@ def get_xarray_dataset(
         An xarray dataset.
     """
     # check that the data accessor exists and get its class
-    if data_accessor_name not in DataAccessorFactory.data_accessor_names:
+    if data_accessor_name not in DataAccessorFactory.data_accessor_names():
         raise ValueError(
             f"Data accessor '{data_accessor_name}' does not exist. "
-            f"Please choose from {DataAccessorFactory.data_accessor_names}."
+            f"Please choose from {DataAccessorFactory.data_accessor_names()}."
         )
     else:
         data_accessor = DataAccessorFactory.get_data_accessor(

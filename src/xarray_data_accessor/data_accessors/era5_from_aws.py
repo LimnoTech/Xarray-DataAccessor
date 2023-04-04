@@ -13,10 +13,10 @@ from typing import (
     Union,
     List,
     Dict,
-    Number,
     Optional,
     TypedDict,
 )
+from numbers import Number
 from xarray_data_accessor.multi_threading import (
     get_multithread,
 )
@@ -26,11 +26,11 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
-from xarray_data_accessor.data_accessors.data_accessor_base import (
+from xarray_data_accessor.data_accessors.base import (
     DataAccessorBase,
     AttrsDict,
 )
-from xarray_data_accessor import (
+from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
 
@@ -90,18 +90,18 @@ class AWSDataAccessor(DataAccessorBase):
         # store last accessed dataset name
         self.dataset_name = None
 
-    @property
-    def supported_datasets(self) -> List[str]:
+    @classmethod
+    def supported_datasets(cls) -> List[str]:
         """Returns all datasets that can be accessed."""""
         return [
             'reanalysis-era5-single-levels',
         ]
 
-    @property
-    def dataset_variables(self) -> Dict[str, List[str]]:
+    @classmethod
+    def dataset_variables(cls) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
         return {
-            self.supported_datasets[0]: [
+            cls.supported_datasets()[0]: [
                 'eastward_wind_at_10_metres',
                 'northward_wind_at_10_metres',
                 'eastward_wind_at_100_metres',
@@ -185,10 +185,10 @@ class AWSDataAccessor(DataAccessorBase):
         NOTE: AWS multithreading is best handled across months.
         """
         # check dataset compatibility
-        if dataset_name not in self.supported_datasets:
+        if dataset_name not in self.supported_datasets():
             raise ValueError(
                 f'param:dataset_name must be one of the following: '
-                f'{self.supported_datasets}'
+                f'{self.supported_datasets()}'
             )
         else:
             self.dataset_name = dataset_name
@@ -346,7 +346,7 @@ class AWSDataAccessor(DataAccessorBase):
         # iterate over variables and create requests
         for variable in variables:
             count = 0
-            if variable in self.dataset_variables[self.dataset_name]:
+            if variable in self.dataset_variables[self.dataset_name]():
                 endpoint_suffix = f'{variable}.nc'
             else:
                 warnings.warn(

@@ -12,11 +12,11 @@ from typing import (
     Tuple,
     Dict,
     List,
-    Number,
     Optional,
     Union,
     TypedDict,
 )
+from numbers import Number
 from xarray_data_accessor.multi_threading import (
     get_multithread,
 )
@@ -26,14 +26,14 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
-from xarray_data_accessor.data_accessors.data_accessor_base import (
+from xarray_data_accessor.data_accessors.base import (
     DataAccessorBase,
     AttrsDict,
 )
-from xarray_data_accessor import (
+from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
-from data_accessors.era5_from_cds_info import (
+from xarray_data_accessor.data_accessors.era5_from_cds_info import (
     SINGLE_LEVEL_VARIABLES,
     MISSING_MONTHLY_VARIABLES,
     MISSING_HOURLY_VARIABLES,
@@ -85,8 +85,8 @@ class CDSDataAccessor(DataAccessorBase):
         # store the last dataset name grabbed for caching
         self.dataset_name = None
 
-    @property
-    def supported_datasets(self) -> List[str]:
+    @classmethod
+    def supported_datasets(cls) -> List[str]:
         """Returns all datasets that can be accessed."""""
         return [
             'reanalysis-era5-single-levels',
@@ -101,12 +101,12 @@ class CDSDataAccessor(DataAccessorBase):
             'reanalysis-era5-land-monthly-means',
         ]
 
-    @property
-    def dataset_variables(self) -> Dict[str, List[str]]:
+    @classmethod
+    def dataset_variables(cls) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
         out_dict = {}
-        for dataset in self.supported_datasets:
-            out_dict[dataset] = self._possible_variables(dataset)
+        for dataset in cls.supported_datasets():
+            out_dict[dataset] = cls._possible_variables(dataset)
 
         return out_dict
 
@@ -203,10 +203,10 @@ class CDSDataAccessor(DataAccessorBase):
             observations limits must be considered.
         """
         # check dataset compatibility
-        if dataset_name not in self.supported_datasets:
+        if dataset_name not in self.supported_datasets():
             raise ValueError(
                 f'param:dataset_name must be one of the following: '
-                f'{self.supported_datasets}'
+                f'{self.supported_datasets()}'
             )
         else:
             self.dataset_name = dataset_name
@@ -234,7 +234,16 @@ class CDSDataAccessor(DataAccessorBase):
 
         with client as executor:
             for variable in variables:
-                logging.info(f'Getting {variable} from CDS API')
+                # check if variable is supported
+                if not variable in self.dataset_variables[self.dataset_name]():
+                    warnings.warn(
+                        message=(
+                            f'Variable={variable} cannot be found for AWS'
+                        ),
+                    )
+                    continue
+                else:
+                    logging.info(f'Getting {variable} from CDS API')
 
                 # store futures
                 var_dict = {}

@@ -14,7 +14,6 @@ from xarray_data_accessor.core_functions import (
     get_data_tables,
     delete_temp_files,
 )
-from xarray_data_accessor.data_accessor_factory import (
-    DataAccessorProduct,
+from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
 )

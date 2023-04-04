@@ -4,8 +4,8 @@ import xarray as xr
 from typing import (
     Dict,
     Union,
-    Number,
 )
+from numbers import Number
 
 
 def combine_variables(

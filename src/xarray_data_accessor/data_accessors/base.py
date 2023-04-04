@@ -3,12 +3,12 @@ from typing import (
     List,
     Dict,
     Union,
-    Number,
     TypedDict,
 )
+from numbers import Number
 from datetime import datetime
 from xarray import Dataset
-from xarray_data_accessor.shared_types import BoundingBoxDict
+#from xarray_data_accessor.shared_types import BoundingBoxDict
 
 
 class AttrsDict(TypedDict):
@@ -29,12 +29,12 @@ class DataAccessorBase(abc.ABC):
     ) -> None:
         raise NotImplementedError
 
-    @abc.abstractproperty
+    @abc.abstractclassmethod
     def supported_datasets(self) -> List[str]:
         """Returns all datasets that can be accessed."""""
         raise NotImplementedError
 
-    @abc.abstractproperty
+    @abc.abstractclassmethod
     def dataset_variables(self) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
         raise NotImplementedError
@@ -56,7 +56,7 @@ class DataAccessorBase(abc.ABC):
         variables: List[str],
         start_dt: datetime,
         end_dt: datetime,
-        bbox: BoundingBoxDict,
+        bbox: dict,  # BoundingBoxDict,
         timezone: str,
         **kwargs,
     ) -> Dataset:
