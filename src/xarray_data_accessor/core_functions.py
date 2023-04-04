@@ -17,6 +17,7 @@ from typing import (
 )
 from xarray_data_accessor.shared_types import (
     CoordsTuple,
+    TimeInput,
     TableInput,
     ShapefileInput,
     RasterInput,
@@ -24,11 +25,90 @@ from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
     ResolutionTuple,
 )
-from xarray_data_accessor import utility_functions
+from xarray_data_accessor import (
+    utility_functions,
+    DataAccessorFactory,
+)
+
+
+def get_xarray_dataset(
+    data_accessor_name: str,
+    dataset_name: str,
+    variables: Union[str, List[str]],
+    start_time: TimeInput,
+    end_time: TimeInput,
+    coordinates: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+    csv_of_coords: Optional[TableInput] = None,
+    shapefile: Optional[ShapefileInput] = None,
+    raster: Optional[RasterInput] = None,
+    combine_aois: bool = False,
+    **kwargs,
+) -> xr.Dataset:
+    """
+    Arguments:
+        :param data_accessor_name: A valid/supported data_accessor_name.
+            NOTE: see DataAccessorFactory.data_accessor_names.
+        :param dataset_name: A valid/supported dataset_name.
+            NOTE: see DataAccessorFactory.supported_datasets for a mapping
+            of data accessor names to supported dataset names.
+        :param variables: A list of variables from param:dataset_name.
+            NOTE: use DataAccessorFactory.supported_variables() for a mapping
+            of data accessor + dataset names to supported variables.
+        :param start_time: Time/date to start at (inclusive).
+        :param end_time: Time/date to stop at (exclusive).
+        :param aoi_coordinates: Coordinates to define the AOI.
+        :param aoi_csv_of_coords: A csv of lat/longs to define the AOI.
+        :param aoi_shapefile: A shapefile (.shp) to define the AOI.
+        :param aoi_raster: A raster to define the AOI.
+        :param combine_aois: If True, combines all AOIs into one.
+        :param kwargs: Additional keyword arguments to pass to 
+            the underlying data accessor.get_data() function.
+
+    Return:
+        An xarray dataset.
+    """
+    # check that the data accessor exists and get its class
+    if data_accessor_name not in DataAccessorFactory.data_accessor_names:
+        raise ValueError(
+            f"Data accessor '{data_accessor_name}' does not exist. "
+            f"Please choose from {DataAccessorFactory.data_accessor_names}."
+        )
+    else:
+        data_accessor = DataAccessorFactory.get_data_accessor(
+            data_accessor_name,
+        )
+
+    # clean up inputs
+    if isinstance(variables, str):
+        variables = [variables]
+    if isinstance(coordinates, tuple):
+        coordinates = [coordinates]
+
+    # define time and space AOI
+    start_dt = utility_functions.get_datetime(start_time)
+    end_dt = utility_functions.get_datetime(end_time)
+
+    bounding_box = get_bounding_box(
+        coords=coordinates,
+        csv=csv_of_coords,
+        shapefile=shapefile,
+        raster=raster,
+        union_bbox=combine_aois,
+    )
+
+    # get data
+    xarray_set = data_accessor.get_data(
+        dataset_name=dataset_name,
+        variables=variables,
+        start_time=start_dt,
+        end_time=end_dt,
+        bounding_box=bounding_box,
+        kwargs=kwargs,
+    )
 
 
 def get_bounding_box(
-    coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+    coords: Optional[List[CoordsTuple]] = None,
     csv: Optional[TableInput] = None,
     shapefile: Optional[ShapefileInput] = None,
     raster: Optional[RasterInput] = None,

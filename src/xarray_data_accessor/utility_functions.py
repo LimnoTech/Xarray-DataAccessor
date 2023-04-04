@@ -60,13 +60,11 @@ def _prep_small_bbox(
 
 
 def _bbox_from_coords(
-    coords: Union[CoordsTuple, List[CoordsTuple]],
+    coords: List[CoordsTuple],
 ) -> BoundingBoxDict:
     """Returns a bounding box from a list of coordinates."""
     # TODO: add buffer so the edge isn't the exact coordinate?
     # TODO : make method
-    if isinstance(coords, tuple):
-        coords = [coords]
     north = coords[0][0]
     south = coords[0][0]
     east = coords[0][1]
