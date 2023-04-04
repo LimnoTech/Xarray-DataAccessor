@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import (
     Union,
     List,
+    Optional,
 )
 from xarray_data_accessor.shared_types import (
     TimeInput,
@@ -23,6 +24,64 @@ from xarray_data_accessor.shared_types import (
     ShapefileInput,
     BoundingBoxDict,
 )
+
+# "Front-end" utility functions ###############################################
+
+
+def get_bounding_box(
+    coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+    csv: Optional[TableInput] = None,
+    shapefile: Optional[ShapefileInput] = None,
+    raster: Optional[RasterInput] = None,
+    union_bbox: bool = False,
+) -> BoundingBoxDict:
+    """Gets the bounding box from a variety of inputs.
+
+    NOTE: if multiple inputs are provided and param:union_bbox is False,
+        an error will be raised.
+
+    Arguments:
+        coords: a tuple or list of coordinate tuples (lat, lon).
+        csv: a csv file or dataframe of coordinates.
+        shapefile: a shapefile path or GeoDataFrame.
+        raster: a raster path or xarray dataset.
+        union_bbox: if True, returns the union of all bounding boxes.
+
+    Returns:
+        A bounding box dictionary.
+    """
+    # get inputs in a dict
+    inputs_dict = {
+        'coords': coords,
+        'csv': csv,
+        'shapefile': shapefile,
+        'raster': raster,
+    }
+
+    # make sure we are not using multiple inputs at once
+    if sum(x is not None for x in inputs_dict.values()) > 1 and not union_bbox:
+        raise ValueError(
+            'Only one input can be used at a time unless param:union_bbox=True!'
+        )
+
+    # get bounding boxes
+    outputs_dict = {}
+    for key, value in inputs_dict.items():
+        if value is not None:
+            if key == 'coords':
+                outputs_dict[key] = _bbox_from_coords(value)
+            elif key == 'csv':
+                outputs_dict[key] = _bbox_from_coords_csv(value)
+            elif key == 'shapefile':
+                outputs_dict[key] = _bbox_from_shp(value)
+            elif key == 'raster':
+                outputs_dict[key] = _bbox_from_raster(value)
+
+    # if we are unionizing the bounding boxes, do that, otherwise return the bbox
+    if union_bbox:
+        return _unionize_bbox(list(outputs_dict.values()))
+    else:
+        return list(outputs_dict.values())[0]
 
 
 def get_datetime(input_date: TimeInput) -> datetime:
@@ -71,7 +130,10 @@ def convert_timezone(
     return xarray_dataset
 
 
-def bbox_from_coords(
+# "Back-end" utility functions ###############################################
+
+
+def _bbox_from_coords(
     coords: Union[CoordsTuple, List[CoordsTuple]],
 ) -> BoundingBoxDict:
     """Returns a bounding box from a list of coordinates."""
@@ -100,7 +162,7 @@ def bbox_from_coords(
     }
 
 
-def bbox_from_coords_csv(
+def _bbox_from_coords_csv(
     csv: TableInput,
 ) -> BoundingBoxDict:
     """Gets the bounding box from a csv/dataframe of coordinates."""
@@ -108,7 +170,7 @@ def bbox_from_coords_csv(
     raise NotImplementedError
 
 
-def bbox_from_shp(
+def _bbox_from_shp(
     shapefile: ShapefileInput,
 ) -> BoundingBoxDict:
     """Gets the bounding box from a shapefile."""
@@ -144,10 +206,30 @@ def bbox_from_shp(
     }
 
 
-def bbox_from_raster(
+def _bbox_from_raster(
     raster: RasterInput,
 ) -> BoundingBoxDict:
     """Gets the bounding box from a raster."""
 
     # TODO : make method
     raise NotImplementedError
+
+
+def _unionize_bbox(
+    bbox_list: List[BoundingBoxDict],
+) -> BoundingBoxDict:
+    """Returns the union of multiple bounding boxes."""
+    # iterate over the bounding boxes and get the union
+    for i, bbox in enumerate(bbox_list):
+        if i == 0:
+            out_bbox = bbox.copy()
+        else:
+            if bbox['north'] > out_bbox['north']:
+                out_bbox['north'] = bbox['north']
+            if bbox['south'] < out_bbox['south']:
+                out_bbox['south'] = bbox['south']
+            if bbox['east'] > out_bbox['east']:
+                out_bbox['east'] = bbox['east']
+            if bbox['west'] < out_bbox['west']:
+                out_bbox['west'] = bbox['west']
+    return out_bbox
