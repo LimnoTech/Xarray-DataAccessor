@@ -2,6 +2,8 @@ import abc
 from typing import (
     List,
     Dict,
+    Union,
+    Number,
 )
 from datetime import datetime
 from xarray import Dataset
@@ -28,7 +30,11 @@ class DataAccessorBase(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _write_attrs(self) -> None:
+    def _write_attrs(
+        self,
+        dataset_name: str,
+        **kwargs,
+    ) -> Dict[str, Union[str, Number]]:
         """Used to write aligned attributes to all sub datasets before merging"""
         raise NotImplementedError
 

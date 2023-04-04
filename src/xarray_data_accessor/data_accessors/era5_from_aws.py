@@ -13,11 +13,15 @@ from typing import (
     Union,
     List,
     Dict,
+    Number,
     Optional,
     TypedDict,
 )
 from xarray_data_accessor.multi_threading import (
     get_multithread,
+)
+from xarray_data_accessor.data_accessors.shared_functions import (
+    combine_variables,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -53,26 +57,53 @@ class AWSDataAccessor:
         """Returns all datasets that can be accessed."""""
         return [
             'reanalysis-era5-single-levels',
-            'reanalysis-era5-single-levels-preliminary-back-extension',
-            'reanalysis-era5-single-levels-monthly-means',
-            'reanalysis-era5-single-levels-monthly-means-preliminary-back-extension',
-            'reanalysis-era5-pressure-levels',
-            'reanalysis-era5-pressure-levels-monthly-means',
-            'reanalysis-era5-pressure-levels-preliminary-back-extension',
-            'reanalysis-era5-pressure-levels-monthly-means-preliminary-back-extension',
-            'reanalysis-era5-land',
-            'reanalysis-era5-land-monthly-means',
         ]
 
-    # TODO: fill this out!
     @property
     def dataset_variables(self) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
-        raise NotImplementedError
+        return {
+            self.supported_datasets[0]: [
+                'eastward_wind_at_10_metres',
+                'northward_wind_at_10_metres',
+                'eastward_wind_at_100_metres',
+                'northward_wind_at_100_metres',
+                'dew_point_temperature_at_2_metres',
+                'air_temperature_at_2_metres',
+                'air_temperature_at_2_metres_1hour_Maximum',
+                'air_temperature_at_2_metres_1hour_Minimum',
+                'air_pressure_at_mean_sea_level',
+                'sea_surface_wave_mean_period',
+                'sea_surface_wave_from_direction',
+                'significant_height_of_wind_and_swell_waves',
+                'snow_density',
+                'lwe_thickness_of_surface_snow_amount',
+                'surface_air_pressure',
+                'integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation',
+                'precipitation_amount_1hour_Accumulation',
+            ],
+        }
 
-    def _write_attrs(self) -> None:
-        """Used to write aligned attributes to all sub datasets before merging"""
-        raise NotImplementedError
+    def _write_attrs(
+        self,
+        dataset_name: str,
+        **kwargs,
+    ) -> Dict[str, Union[str, Number]]:
+        """Used to write aligned attributes to all datasets before merging"""
+        attrs = {}
+
+        # write attrs storing top level data source info
+        attrs['dataset_name'] = dataset_name
+        attrs['institution'] = 'Planet OS'
+
+        # write attrs storing projection info
+        attrs['x_dim'] = 'longitude'
+        attrs['y_dim'] = 'latitude'
+        attrs['EPSG'] = 4326
+
+        # write attrs storing time dimension info
+        attrs['time_step'] = 'hourly'
+        return attrs
 
     def get_data(
         self,
@@ -81,8 +112,7 @@ class AWSDataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
-        use_dask: bool = False,
-        specific_hours: Optional[List[int]] = None,
+        **kwargs,
     ) -> xr.Dataset:
         """
         Main data getter function.
@@ -96,6 +126,12 @@ class AWSDataAccessor:
                 f'{self.supported_datasets}'
             )
 
+        # parse kwargs
+        if 'use_dask' in kwargs['kwargs'].keys():
+            self.use_dask = kwargs['kwargs']['use_dask']
+        else:
+            self.use_dask = True
+
         # make a dictionary to store all data
         all_data_dict = {}
 
@@ -104,6 +140,7 @@ class AWSDataAccessor:
             variables = [variables]
 
         aws_request_dicts = self._get_requests_dicts(
+            dataset_name,
             variables,
             start_dt,
             end_dt,
@@ -112,7 +149,7 @@ class AWSDataAccessor:
 
         # set up multithreading client
         client, as_completed_func = get_multithread(
-            use_dask=False,
+            use_dask=self.use_dask,
             n_workers=self.thread_limit,
             threads_per_worker=1,
             processes=True,
@@ -177,18 +214,18 @@ class AWSDataAccessor:
                 {list(ds.data_vars)[0]: variable},
             )
 
-        return all_data_dict
+        # make an updates attributes dictionary
+        attrs_dict = self._write_attrs(dataset_name)
 
-    def possible_variables(self) -> List:
-        # replace with dataset_variables
-        raise NotImplementedError
-        out_list = []
-        for k, v in self.aws_variable_mapping.items():
-            out_list.append(k)
-            out_list.append(v)
-        return out_list
+        # return the combined data
+        return combine_variables(
+            all_data_dict,
+            attrs_dict,
+            epsg=4326,
+        )
 
     # AWS specific methods #####################################################
+
     @staticmethod
     def _rename_dimensions(dataset: xr.Dataset) -> xr.Dataset:
         time_dim = [d for d in list(dataset.coords) if 'time' in d]
@@ -211,7 +248,7 @@ class AWSDataAccessor:
         ds: xr.Dataset,
         bbox: BoundingBoxDict,
     ) -> xr.Dataset:
-        """Crops AWS ERA5 to the nearest 0.25 resolution to align with CDS output"""
+        """Crops AWS ERA5 to the nearest 0.25 resolution"""
         # make sure we have inclusive bounds at 0.25
         x_bounds = np.array([bbox['west'], bbox['east']])
         y_bounds = np.array([bbox['south'], bbox['north']])
@@ -234,6 +271,7 @@ class AWSDataAccessor:
 
     def _get_requests_dicts(
         self,
+        dataset_name: str,
         variables: List[str],
         start_dt: datetime,
         end_dt: datetime,
@@ -249,9 +287,7 @@ class AWSDataAccessor:
         # iterate over variables and create requests
         for variable in variables:
             count = 0
-            if variable in self.aws_variable_mapping.keys():
-                endpoint_suffix = f'{self.aws_variable_mapping[variable]}.nc'
-            elif variable in self.aws_variable_mapping.values():
+            if variable in self.dataset_variables[dataset_name]:
                 endpoint_suffix = f'{variable}.nc'
             else:
                 warnings.warn(
@@ -267,10 +303,13 @@ class AWSDataAccessor:
                     m_f = end_dt.month + 1
                 for m in range(m_i, m_f):
                     m = str(m).zfill(2)
+
+                    # create the request/access dictionary
+                    endpoint = f'{endpoint_prefix}/{year}/{m}/data/{endpoint_suffix}'
                     aws_request_dicts.append(
                         {
                             'variable': variable,
-                            'aws_endpoint': f'{endpoint_prefix}/{year}/{m}/data/{endpoint_suffix}',
+                            'aws_endpoint': endpoint,
                             'index': count,
                             'bbox': bbox,
                         }

@@ -11,11 +11,15 @@ from typing import (
     Tuple,
     Dict,
     List,
+    Number,
     Optional,
     Union,
 )
 from xarray_data_accessor.multi_threading import (
     get_multithread,
+)
+from xarray_data_accessor.data_accessors.shared_functions import (
+    combine_variables,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -115,30 +119,37 @@ class CDSDataAccessor:
             'reanalysis-era5-land-monthly-means',
         ]
 
-    # TODO: fill this out!
     @property
     def dataset_variables(self) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
-        raise NotImplementedError
+        out_dict = {}
+        for dataset in self.supported_datasets:
+            out_dict[dataset] = self._possible_variables(dataset)
 
-    def _write_attrs(self) -> None:
-        """Used to write aligned attributes to all sub datasets before merging"""
-        raise NotImplementedError
+        return out_dict
 
-    def possible_variables(self) -> List[str]:
-        # TODO: remove this method and replace with dataset_variables
-        raise NotImplementedError
-        if 'single-levels' in self.dataset_name:
-            if 'monthly' in self.dataset_name:
-                return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_MONTHLY_VARIABLES]
-            else:
-                return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_HOURLY_VARIABLES]
-        elif 'pressure-levels' in self.dataset_name:
-            return PRESSURE_LEVEL_VARIABLES
-        elif 'land' in self.dataset_name:
-            return ERA5_LAND_VARIABLES
+    def _write_attrs(
+        self,
+        dataset_name: str,
+    ) -> Dict[str, Number]:
+        """Used to write aligned attributes to all datasets before merging"""
+        attrs = {}
+
+        # write attrs storing top level data source info
+        attrs['dataset_name'] = dataset_name
+        attrs['institution'] = CDSDataAccessor.institution
+
+        # write attrs storing projection info
+        attrs['x_dim'] = 'longitude'
+        attrs['y_dim'] = 'latitude'
+        attrs['EPSG'] = 4326
+
+        # write attrs storing time dimension info
+        if 'monthly' in dataset_name:
+            attrs['time_step'] = 'monthly'
         else:
-            raise ValueError(f'Cannot return variables. Something went wrong.')
+            attrs['time_step'] = 'hourly'
+        return attrs
 
     def get_data(
         self,
@@ -147,8 +158,7 @@ class CDSDataAccessor:
         start_dt: datetime,
         end_dt: datetime,
         bbox: BoundingBoxDict,
-        use_dask: bool = False,
-        specific_hours: Optional[List[int]] = None,
+        **kwargs,
     ) -> xr.Dataset:
         """
         Main data getter function.
@@ -163,15 +173,29 @@ class CDSDataAccessor:
                 f'{CDSDataAccessor.supported_datasets}'
             )
 
+        # access kwargs to override defaults
+        if 'use_dask' in kwargs['kwargs'].keys():
+            self.use_dask = kwargs['kwargs']['use_dask']
+        else:
+            self.use_dask = True
+        if 'file_format' in kwargs['kwargs'].keys():
+            self.file_format = kwargs['kwargs']['file_format']
+        else:
+            self.file_format = 'netcdf'
+        if 'specific_hours' in kwargs['kwargs'].keys():
+            self.specific_hours = kwargs['kwargs']['specific_hours']
+        else:
+            self.specific_hours = None
+
         # make time dict w/ CDS API formatting
         time_dicts = self._get_time_dicts(
             start_dt,
             end_dt,
-            specific_hours=specific_hours,
+            specific_hours=self.specific_hours,
         )
 
         client, as_completed_func = get_multithread(
-            use_dask=use_dask,
+            use_dask=self.use_dask,
             n_workers=self.thread_limit,
             threads_per_worker=1,
             processes=True,
@@ -184,6 +208,7 @@ class CDSDataAccessor:
         with client as executor:
             for variable in variables:
                 logging.info(f'Getting {variable} from CDS API')
+
                 # store futures
                 var_dict = {}
                 input_dicts = []
@@ -219,7 +244,10 @@ class CDSDataAccessor:
                         end_i = int(batch * 10)
 
                     futures = {
-                        executor.submit(self._get_api_response, arg): arg for arg in input_dicts[start_i:end_i]
+                        executor.submit(
+                            self._get_api_response,
+                            arg,
+                        ): arg for arg in input_dicts[start_i:end_i]
                     }
                     for future in as_completed_func(futures):
                         try:
@@ -252,9 +280,34 @@ class CDSDataAccessor:
                     {list(ds.data_vars)[0]: variable},
                 )
 
-        return all_data_dict
+        # make an updates attributes dictionary
+        attrs_dict = self._write_attrs(dataset_name)
+
+        # return the combined data
+        return combine_variables(
+            all_data_dict,
+            attrs_dict,
+            epsg=4326,
+        )
 
     # CDS API specific methods #################################################
+    @staticmethod
+    def _possible_variables(
+        dataset_name: str,
+    ) -> List[str]:
+        """Returns all possible variables for a given dataset."""
+        if 'single-levels' in dataset_name:
+            if 'monthly' in dataset_name:
+                return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_MONTHLY_VARIABLES]
+            else:
+                return [i for i in SINGLE_LEVEL_VARIABLES if i not in MISSING_HOURLY_VARIABLES]
+        elif 'pressure-levels' in dataset_name:
+            return PRESSURE_LEVEL_VARIABLES
+        elif 'land' in dataset_name:
+            return ERA5_LAND_VARIABLES
+        else:
+            raise ValueError(f'Cannot return variables. Something went wrong.')
+
     @staticmethod
     def _get_years_list(
         start_dt: datetime,
