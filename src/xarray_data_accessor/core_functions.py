@@ -19,7 +19,99 @@ from xarray_data_accessor.shared_types import (
     TableInput,
     ResampleDict,
     BoundingBoxDict,
+    ResolutionTuple,
 )
+
+
+def resample_dataset(
+    xarray_dataset: xr.Dataset,
+    resolution_factor: Optional[Union[int, float]] = None,
+    xy_resolution_factors: Optional[ResolutionTuple] = None,
+    resample_method: Optional[str] = None,
+) -> xr.Dataset:
+    """Resamples self.xarray_dataset
+
+    Arguments:
+        :param resolution_factor: the number of times FINER to make the 
+            dataset (applied to both dimensions).
+            Example: resolution=10 on a 0.25 -> 0.025 resolution.
+        :param xy_resolution_factors: Allows one to specify a resolution 
+            factor for the X[0] and Y[1] dimensions.
+        :param resample_method: A valid resampling method from rasterio.enums.Resample 
+            NOTE: The default is 'nearest'. Do not use any averaging resample 
+            methods when working with a categorical raster! 
+            Bilinear resampling is the default.
+
+    Returns:
+        The resampled xarray dataset.
+    """
+    # TODO: switch to xarray.interp() This works but overflows memory for large datasets.
+    # verify all required inputs are present
+    if xarray_dataset is None:
+        raise ValueError(
+            'self.xarray_dataset is None! You must use get_data() first.'
+        )
+    if resolution_factor is None and xy_resolution_factors is None:
+        raise ValueError(
+            'Must provide an input for either param:resolution_factor or '
+            'param:xy_resolution_factors'
+        )
+
+    # verify the resample methods
+    real_methods = vars(Resampling)['_member_names_']
+    if resample_method is None:
+        resample_method = 'bilinear'
+    elif resample_method not in real_methods:
+        raise ValueError(
+            f'Resampling method {resample_method} is invalid! Please select from {real_methods}'
+        )
+
+    # apply the resampling
+    if xy_resolution_factors is None:
+        xy_resolution_factors = (resolution_factor, resolution_factor)
+
+    x_dim = xarray_dataset.attrs['x_dim']
+    y_dim = xarray_dataset.attrs['y_dim']
+
+    # rioxarray expects x/y dimensions
+    renamed = False
+    if x_dim != 'x' or y_dim != 'y':
+        xarray_dataset = xarray_dataset.rename(
+            {x_dim: 'x', y_dim: 'y'}
+        )
+        renamed = True
+
+    # set our resampling arguments
+    width = int(len(xarray_dataset.x) * xy_resolution_factors[0])
+    height = int(len(xarray_dataset.y) * xy_resolution_factors[1])
+    crs = xarray_dataset.rio.crs
+
+    # chunk in a way that will speed up the resampling
+    xarray_dataset = xarray_dataset.chunk(
+        {'time': 1, 'x': 100, 'y': 100},
+    )
+
+    # resample and return the adjusted dataset
+    logging.info(
+        f'Resampling to height={height}, width={width}. datetime={datetime.now()}'
+    )
+    xarray_dataset = _resample_slice(
+        data=xarray_dataset,
+        resample_dict={
+            'height': height,
+            'width': width,
+            'resampling_method': resample_method,
+            'crs': crs,
+            'index': 1,
+        })[-1]
+
+    if renamed:
+        xarray_dataset = xarray_dataset.rename(
+            {'x': x_dim, 'y': y_dim}
+        )
+    logging.info(f'Resampling complete: datetime={datetime.now()}')
+    logging.info(f'Resampled dataset info: {xarray_dataset.dims}')
+    return xarray_dataset
 
 
 def get_data_tables(
