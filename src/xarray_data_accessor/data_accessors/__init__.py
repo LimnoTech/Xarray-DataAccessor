@@ -8,3 +8,4 @@ Each DataAccessor is registered with the DataAccessorFactory.
 """
 from xarray_data_accessor.data_accessors.era5_from_aws import AWSDataAccessor
 from xarray_data_accessor.data_accessors.era5_from_cds import CDSDataAccessor
+from xarray_data_accessor.data_accessors.data_accessor_base import DataAccessorBase
