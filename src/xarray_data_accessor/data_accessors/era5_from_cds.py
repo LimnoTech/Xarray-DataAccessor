@@ -24,8 +24,7 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
-from xarray_data_accessor.era5_datasets_info import (
-    DATASET_NAMES,
+from data_accessors.era5_from_cds_info import (
     SINGLE_LEVEL_VARIABLES,
     MISSING_MONTHLY_VARIABLES,
     MISSING_HOURLY_VARIABLES,
