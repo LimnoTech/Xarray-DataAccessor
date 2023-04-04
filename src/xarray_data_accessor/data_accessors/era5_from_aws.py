@@ -27,6 +27,27 @@ from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
 
+# TODO: remove probably but keep for now
+CDS_TO_AWS_NAMES_CROSSWALK = {
+    '10m_u_component_of_wind': 'eastward_wind_at_10_metres',
+    '10m_v_component_of_wind': 'northward_wind_at_10_metres',
+    '100m_u_component_of_wind': 'eastward_wind_at_100_metres',
+    '100m_v_component_of_wind': 'northward_wind_at_100_metres',
+    '2m_dewpoint_temperature': 'dew_point_temperature_at_2_metres',
+    '2m_temperature': 'air_temperature_at_2_metres',
+    'maximum_2m_temperature_since_previous_post_processing': 'air_temperature_at_2_metres_1hour_Maximum',
+    'minimum_2m_temperature_since_previous_post_processing': 'air_temperature_at_2_metres_1hour_Minimum',
+    'mean_sea_level_pressure': 'air_pressure_at_mean_sea_level',
+    'mean_wave_period': 'sea_surface_wave_mean_period',
+    'mean_wave_direction': 'sea_surface_wave_from_direction',
+    'significant_height_of_total_swell': 'significant_height_of_wind_and_swell_waves',
+    'snow_density': 'snow_density',
+    'snow_depth': 'lwe_thickness_of_surface_snow_amount',
+    'surface_pressure': 'surface_air_pressure',
+    'surface_solar_radiation_downwards': 'integral_wrt_time_of_surface_direct_downwelling_shortwave_flux_in_air_1hour_Accumulation',
+    'total_precipitation': 'precipitation_amount_1hour_Accumulation',
+}
+
 
 class AWSRequestDict(TypedDict):
     variable: str
