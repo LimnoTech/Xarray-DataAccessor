@@ -21,7 +21,6 @@ from xarray_data_accessor.shared_types import (
     TableInput,
     ShapefileInput,
     RasterInput,
-    ResampleDict,
     BoundingBoxDict,
     ResolutionTuple,
 )
@@ -42,6 +41,10 @@ def get_xarray_dataset(
     shapefile: Optional[ShapefileInput] = None,
     raster: Optional[RasterInput] = None,
     combine_aois: bool = False,
+    timezone: Optional[str] = None,
+    resample_factor: Optional[int] = None,
+    xy_resolution_factors: Optional[ResolutionTuple] = None,
+    resample_method: Optional[str] = None,
     **kwargs,
 ) -> xr.Dataset:
     """
@@ -61,6 +64,9 @@ def get_xarray_dataset(
         :param aoi_shapefile: A shapefile (.shp) to define the AOI.
         :param aoi_raster: A raster to define the AOI.
         :param combine_aois: If True, combines all AOIs into one.
+        :param timezone: The timezone to use for the start/end times.
+        :param resample_factor: The factor to resample the data by.
+        :param xy_resolution_factors: The X,Y dimension factors to resample the data by.
         :param kwargs: Additional keyword arguments to pass to 
             the underlying data accessor.get_data() function.
 
@@ -97,7 +103,7 @@ def get_xarray_dataset(
     )
 
     # get data
-    xarray_set = data_accessor.get_data(
+    xarray_dataset = data_accessor.get_data(
         dataset_name=dataset_name,
         variables=variables,
         start_time=start_dt,
@@ -105,6 +111,25 @@ def get_xarray_dataset(
         bounding_box=bounding_box,
         kwargs=kwargs,
     )
+
+    # change timezone if necessary
+    if timezone:
+        xarray_dataset = convert_timezone(
+            xarray_dataset,
+            timezone,
+        )
+
+    # resample data is necessary
+    if resample_factor or xy_resolution_factors:
+        xarray_dataset = resample_dataset(
+            xarray_dataset,
+            resolution_factor=resample_factor,
+            xy_resolution_factors=xy_resolution_factors,
+            resample_method=resample_method,
+        )
+
+    # return the final dataset
+    return xarray_dataset
 
 
 def get_bounding_box(
