@@ -30,12 +30,12 @@ class DataAccessorBase(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractclassmethod
-    def supported_datasets(self) -> List[str]:
+    def supported_datasets(cls) -> List[str]:
         """Returns all datasets that can be accessed."""""
         raise NotImplementedError
 
     @abc.abstractclassmethod
-    def dataset_variables(self) -> Dict[str, List[str]]:
+    def dataset_variables(cls) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
         raise NotImplementedError
 

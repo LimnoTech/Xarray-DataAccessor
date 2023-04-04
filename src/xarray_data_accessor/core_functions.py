@@ -91,8 +91,8 @@ def get_xarray_dataset(
         coordinates = [coordinates]
 
     # define time and space AOI
-    start_dt = utility_functions.get_datetime(start_time)
-    end_dt = utility_functions.get_datetime(end_time)
+    start_dt = utility_functions._get_datetime(start_time)
+    end_dt = utility_functions._get_datetime(end_time)
 
     bounding_box = get_bounding_box(
         coords=coordinates,
@@ -106,9 +106,9 @@ def get_xarray_dataset(
     xarray_dataset = data_accessor.get_data(
         dataset_name=dataset_name,
         variables=variables,
-        start_time=start_dt,
-        end_time=end_dt,
-        bounding_box=bounding_box,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        bbox=bounding_box,
         kwargs=kwargs,
     )
 

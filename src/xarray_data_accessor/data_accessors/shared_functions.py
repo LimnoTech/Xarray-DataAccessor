@@ -1,5 +1,6 @@
 import logging
 import warnings
+import rioxarray
 import xarray as xr
 from typing import (
     Dict,

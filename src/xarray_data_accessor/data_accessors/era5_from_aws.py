@@ -241,6 +241,11 @@ class AWSDataAccessor(DataAccessorBase):
                     var = aws_response_dict['variable']
                     index = aws_response_dict['index']
                     ds = aws_response_dict['dataset']
+                    ds = self._crop_time_dimension(
+                        ds,
+                        start_dt,
+                        end_dt,
+                    )
                     data_dicts[var][index] = ds
                 except Exception as e:
                     logging.warning(
@@ -265,13 +270,6 @@ class AWSDataAccessor(DataAccessorBase):
                 )
             else:
                 ds = datasets[0]
-
-            # crop by time
-            ds = ds.sel(
-                {
-                    'time': slice(start_dt, end_dt),
-                },
-            ).copy(deep=True)
 
             all_data_dict[variable] = ds.rename(
                 {list(ds.data_vars)[0]: variable},
@@ -346,7 +344,7 @@ class AWSDataAccessor(DataAccessorBase):
         # iterate over variables and create requests
         for variable in variables:
             count = 0
-            if variable in self.dataset_variables[self.dataset_name]():
+            if variable in self.dataset_variables()[self.dataset_name]:
                 endpoint_suffix = f'{variable}.nc'
             else:
                 warnings.warn(
@@ -402,3 +400,14 @@ class AWSDataAccessor(DataAccessorBase):
         )
 
         return aws_request_dict
+
+    @staticmethod
+    def _crop_time_dimension(
+        dataset: xr.Dataset,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> xr.Dataset:
+        """Crops the time dimension to the start and end datetimes."""
+        return dataset.sel(
+            {'time': slice(start_dt, end_dt)},
+        ).copy(deep=True)

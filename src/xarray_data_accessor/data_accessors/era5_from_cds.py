@@ -235,7 +235,7 @@ class CDSDataAccessor(DataAccessorBase):
         with client as executor:
             for variable in variables:
                 # check if variable is supported
-                if not variable in self.dataset_variables[self.dataset_name]():
+                if not variable in self.dataset_variables()[self.dataset_name]:
                     warnings.warn(
                         message=(
                             f'Variable={variable} cannot be found for AWS'
@@ -316,13 +316,10 @@ class CDSDataAccessor(DataAccessorBase):
                     {list(ds.data_vars)[0]: variable},
                 )
 
-        # make an updates attributes dictionary
-        attrs_dict = self._write_attrs()
-
         # return the combined data
         return combine_variables(
             all_data_dict,
-            attrs_dict,
+            self.attrs_dict,
             epsg=4326,
         )
 
@@ -487,6 +484,8 @@ class CDSDataAccessor(DataAccessorBase):
                         days_lists.append(sub_days)
                         sub_days = [day]
                 if len(sub_days) > 0:
+                    if len(days_lists) == 0:
+                        days_lists.append(sub_days)
                     days_lists[-1].extend(sub_days)
 
                 # add to list of dictionaries
