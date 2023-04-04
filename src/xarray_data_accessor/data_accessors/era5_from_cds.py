@@ -2,6 +2,7 @@ import logging
 import warnings
 import multiprocessing
 import tempfile
+import cdsapi
 import xarray as xr
 import pandas as pd
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import (
     Number,
     Optional,
     Union,
+    TypedDict,
 )
 from xarray_data_accessor.multi_threading import (
     get_multithread,
@@ -24,6 +26,13 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
+from xarray_data_accessor.data_accessors.data_accessor_base import (
+    DataAccessorBase,
+    AttrsDict,
+)
+from xarray_data_accessor import (
+    DataAccessorProduct,
+)
 from data_accessors.era5_from_cds_info import (
     SINGLE_LEVEL_VARIABLES,
     MISSING_MONTHLY_VARIABLES,
@@ -33,8 +42,28 @@ from data_accessors.era5_from_cds_info import (
 )
 
 
-class CDSDataAccessor:
-    InputDict = Dict[str, int]
+class CDSKwargsDict(TypedDict):
+    """kwargs for CDSDataAccessor get_data() method."""
+    use_dask: Optional[bool]
+    thread_limit: Optional[int]
+    file_format: Optional[str]
+    specific_hours: Optional[List[int]]
+
+
+class CDSInputDict(TypedDict):
+    """Input dictionary for CDS API request"""
+    product_type: str
+    format: str
+    variable: str
+    year: Union[str, List[str]]
+    month: Union[str, List[str]]
+    day: Optional[Union[str, List[str]]]
+    time: Optional[Union[str, List[str]]]
+    area: List[Number]
+
+
+@DataAccessorProduct
+class CDSDataAccessor(DataAccessorBase):
     file_format_dict = {
         'netcdf': '.nc',
         'grib': '.grib',
@@ -42,65 +71,19 @@ class CDSDataAccessor:
 
     institution = 'ECMWF'
 
-    def __init__(
-        self,
-        thread_limit: Optional[int] = None,
-        file_format: Optional[str] = None,
-    ) -> None:
-
-        # import the API (done here to avoid multiprocessing imports)
-        import cdsapi
+    def __init__(self) -> None:
 
         # set of multiprocessing threads, CDS enforces a concurrency limit
         cores = multiprocessing.cpu_count()
         if cores > 10:
             cores = 10
-        if thread_limit > cores:
-            thread_limit = cores
-        self.thread_limit = thread_limit
-
-        # init file format
-        if file_format is None:
-            file_format = 'netcdf'
-
-        if not file_format in list(self.file_format_dict.keys()):
-            warnings.warn(
-                f'param:file_format={file_format} must be in '
-                f'{self.file_format_dict.file_format_dict.keys()}. Defaulting to '
-                f'file_format=netcdf'
-            )
-            file_format = 'netcdf'
-
-        elif file_format == 'grib':
-            try:
-                import cfgrib
-            except ImportError:
-                warnings.warn(
-                    'No GRIB support -> NetCDF only. Install cfgrib if needed. '
-                    'Defaulting to file_format=netcdf'
-                )
-                file_format = 'netcdf'
-
-        self.file_format = file_format
+        self.thread_limit = cores
 
         # set up CDS client
-        try:
-            self.client = cdsapi.Client()
-        except Exception as e:
-            warnings.warn(
-                message=(
-                    'Follow the instructions on https://cds.climate.copernicus.eu/api-how-to'
-                    ' to get set up! \nBasically manually make a .cdsapirc file '
-                    '(no extension) where it is looking for it (see exception below).'
-                ),
-            )
-            raise e
+        self._client = None
 
-        if self.client is None:
-            raise ValueError(
-                'Must provide a cdsapi.Client() instance to init '
-                'param:cdsapi_client'
-            )
+        # store the last dataset name grabbed for caching
+        self.dataset_name = None
 
     @property
     def supported_datasets(self) -> List[str]:
@@ -127,17 +110,14 @@ class CDSDataAccessor:
 
         return out_dict
 
-    def _write_attrs(
-        self,
-        dataset_name: str,
-        **kwargs,
-    ) -> Dict[str, Number]:
+    @property
+    def attrs_dict(self) -> AttrsDict:
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
 
         # write attrs storing top level data source info
-        attrs['dataset_name'] = dataset_name
-        attrs['institution'] = CDSDataAccessor.institution
+        attrs['dataset_name'] = self.dataset_name
+        attrs['institution'] = self.institution
 
         # write attrs storing projection info
         attrs['x_dim'] = 'longitude'
@@ -145,11 +125,67 @@ class CDSDataAccessor:
         attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
-        if 'monthly' in dataset_name:
+        if 'monthly' in self.dataset_name:
             attrs['time_step'] = 'monthly'
         else:
             attrs['time_step'] = 'hourly'
         return attrs
+
+    def _parse_kwargs(
+        self,
+        kwargs_dict: CDSKwargsDict,
+    ) -> None:
+        """Parses kwargs for CDS data accessors"""
+
+        if 'use_dask' in kwargs_dict.keys():
+            use_dask = kwargs_dict['use_dask']
+            if isinstance(use_dask, bool):
+                self.use_dask = use_dask
+            else:
+                warnings.warn(
+                    'kwarg:use_dask must be a boolean. '
+                    'Defaulting to True.'
+                )
+        else:
+            self.use_dask = True
+
+        if 'thread_limit' in kwargs_dict.keys():
+            thread_limit = kwargs_dict['thread_limit']
+            if isinstance(thread_limit, int):
+                self.thread_limit = thread_limit
+            else:
+                warnings.warn(
+                    'kwarg:thread_limit must be an integer. '
+                    'Defaulting to number of cores.'
+                )
+        else:
+            self.thread_limit = multiprocessing.cpu_count()
+
+        if 'file_format' in kwargs_dict.keys():
+            file_format = self._verify_file_format(
+                kwargs_dict['file_format'],
+            )
+            if file_format in self.file_format_dict.keys():
+                self.file_format = file_format
+            else:
+                warnings.warn(
+                    f'kwarg:file_format must be one of the following: '
+                    f'{self.file_format_dict.keys()}.'
+                )
+        else:
+            self.file_format = 'netcdf'
+
+        if 'specific_hours' in kwargs_dict.keys():
+            specific_hours = kwargs_dict['specific_hours']
+            if isinstance(specific_hours, list):
+                self.specific_hours = specific_hours
+            else:
+                warnings.warn(
+                    'kwarg:specific_hours must be a list of integers. '
+                    'Defaulting to None.'
+                )
+        else:
+            self.specific_hours = None
 
     def get_data(
         self,
@@ -170,22 +206,13 @@ class CDSDataAccessor:
         if dataset_name not in self.supported_datasets:
             raise ValueError(
                 f'param:dataset_name must be one of the following: '
-                f'{CDSDataAccessor.supported_datasets}'
+                f'{self.supported_datasets}'
             )
+        else:
+            self.dataset_name = dataset_name
 
-        # access kwargs to override defaults
-        if 'use_dask' in kwargs['kwargs'].keys():
-            self.use_dask = kwargs['kwargs']['use_dask']
-        else:
-            self.use_dask = True
-        if 'file_format' in kwargs['kwargs'].keys():
-            self.file_format = kwargs['kwargs']['file_format']
-        else:
-            self.file_format = 'netcdf'
-        if 'specific_hours' in kwargs['kwargs'].keys():
-            self.specific_hours = kwargs['kwargs']['specific_hours']
-        else:
-            self.specific_hours = None
+        # parse kwargs
+        self._parse_kwargs(kwargs['kwargs'])
 
         # make time dict w/ CDS API formatting
         time_dicts = self._get_time_dicts(
@@ -281,7 +308,7 @@ class CDSDataAccessor:
                 )
 
         # make an updates attributes dictionary
-        attrs_dict = self._write_attrs(dataset_name)
+        attrs_dict = self._write_attrs()
 
         # return the combined data
         return combine_variables(
@@ -291,6 +318,23 @@ class CDSDataAccessor:
         )
 
     # CDS API specific methods #################################################
+    @property
+    def client(self) -> cdsapi.Client:
+        """Returns a CDS API client."""
+        if self._client is None:
+            try:
+                self._client = cdsapi.Client()
+            except Exception as e:
+                warnings.warn(
+                    message=(
+                        'Follow the instructions on https://cds.climate.copernicus.eu/api-how-to'
+                        ' to get set up! \nBasically manually make a .cdsapirc file '
+                        '(no extension) where it is looking for it (see exception below).'
+                    ),
+                )
+                raise e
+        return self._client
+
     @staticmethod
     def _possible_variables(
         dataset_name: str,
@@ -307,6 +351,30 @@ class CDSDataAccessor:
             return ERA5_LAND_VARIABLES
         else:
             raise ValueError(f'Cannot return variables. Something went wrong.')
+
+    @classmethod
+    def _verify_file_format(
+        cls,
+        file_format: str,
+    ) -> str:
+        if not file_format in list(cls.file_format_dict.keys()):
+            warnings.warn(
+                f'param:file_format={file_format} must be in '
+                f'{cls.file_format_dict.keys()}. Defaulting to '
+                f'file_format=netcdf'
+            )
+            return 'netcdf'
+
+        elif file_format == 'grib':
+            try:
+                import cfgrib
+                return file_format
+            except ImportError:
+                warnings.warn(
+                    'No GRIB support -> NetCDF only. Install cfgrib if needed. '
+                    'Defaulting to file_format=netcdf'
+                )
+                return 'netcdf'
 
     @staticmethod
     def _get_years_list(
@@ -428,7 +496,7 @@ class CDSDataAccessor:
 
     def _get_api_response(
         self,
-        input_dict: InputDict,
+        input_dict: CDSInputDict,
     ) -> Tuple[int, xr.Dataset]:
         """Separated out as a function to support multithreading"""
         # set up temporary file output

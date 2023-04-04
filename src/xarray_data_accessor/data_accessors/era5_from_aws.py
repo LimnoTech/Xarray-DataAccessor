@@ -26,6 +26,13 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
+from xarray_data_accessor.data_accessors.data_accessor_base import (
+    DataAccessorBase,
+    AttrsDict,
+)
+from xarray_data_accessor import (
+    DataAccessorProduct,
+)
 
 # TODO: remove probably but keep for now
 CDS_TO_AWS_NAMES_CROSSWALK = {
@@ -49,7 +56,14 @@ CDS_TO_AWS_NAMES_CROSSWALK = {
 }
 
 
+class AWSKwargsDict(TypedDict):
+    """kwargs for AWSDataAccessor get_data() method."""
+    use_dask: Optional[bool]
+    thread_limit: Optional[int]
+
+
 class AWSRequestDict(TypedDict):
+    """Request dictionary for accessing the S3 bucket."""
     variable: str
     aws_endpoint: str
     index: int
@@ -57,21 +71,24 @@ class AWSRequestDict(TypedDict):
 
 
 class AWSResponseDict(AWSRequestDict):
+    """Dictionary of xarray datasets read from the S3 bucket."""
     dataset: xr.Dataset
 
 
-class AWSDataAccessor:
+@DataAccessorProduct
+class AWSDataAccessor(DataAccessorBase):
     """Data accessor for ERA5 data from AWS Open Data Registry."""
 
-    def __init__(
-        self,
-        thread_limit: Optional[int] = None,
-    ) -> None:
+    institution = 'ECMWF via Planet OS'
 
-        # get cores for multiprocessing
-        if thread_limit is None:
-            thread_limit = multiprocessing.cpu_count
-        self.thread_limit = thread_limit
+    def __init__(self) -> None:
+
+        # get cores and settings for multiprocessing
+        self.thread_limit = multiprocessing.cpu_count
+        self.use_dask = True
+
+        # store last accessed dataset name
+        self.dataset_name = None
 
     @property
     def supported_datasets(self) -> List[str]:
@@ -105,17 +122,14 @@ class AWSDataAccessor:
             ],
         }
 
-    def _write_attrs(
-        self,
-        dataset_name: str,
-        **kwargs,
-    ) -> Dict[str, Union[str, Number]]:
+    @property
+    def attrs_dict(self) -> AttrsDict:
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
 
         # write attrs storing top level data source info
-        attrs['dataset_name'] = dataset_name
-        attrs['institution'] = 'Planet OS'
+        attrs['dataset_name'] = self.dataset_name
+        attrs['institution'] = self.institution
 
         # write attrs storing projection info
         attrs['x_dim'] = 'longitude'
@@ -125,6 +139,36 @@ class AWSDataAccessor:
         # write attrs storing time dimension info
         attrs['time_step'] = 'hourly'
         return attrs
+
+    def _parse_kwargs(
+        self,
+        kwargs_dict: AWSKwargsDict,
+    ) -> None:
+        """Parses kwargs and sets class attributes"""
+
+        if 'use_dask' in kwargs_dict.keys():
+            use_dask = kwargs_dict['use_dask']
+            if isinstance(use_dask, bool):
+                self.use_dask = use_dask
+            else:
+                warnings.warn(
+                    'kwarg:use_dask must be a boolean. '
+                    'Defaulting to True.'
+                )
+        else:
+            self.use_dask = True
+
+        if 'thread_limit' in kwargs_dict.keys():
+            thread_limit = kwargs_dict['thread_limit']
+            if isinstance(thread_limit, int):
+                self.thread_limit = thread_limit
+            else:
+                warnings.warn(
+                    'kwarg:thread_limit must be an integer. '
+                    'Defaulting to number of cores.'
+                )
+        else:
+            self.thread_limit = multiprocessing.cpu_count()
 
     def get_data(
         self,
@@ -146,12 +190,11 @@ class AWSDataAccessor:
                 f'param:dataset_name must be one of the following: '
                 f'{self.supported_datasets}'
             )
+        else:
+            self.dataset_name = dataset_name
 
         # parse kwargs
-        if 'use_dask' in kwargs['kwargs'].keys():
-            self.use_dask = kwargs['kwargs']['use_dask']
-        else:
-            self.use_dask = True
+        self._parse_kwargs(kwargs['kwargs'])
 
         # make a dictionary to store all data
         all_data_dict = {}
@@ -161,7 +204,6 @@ class AWSDataAccessor:
             variables = [variables]
 
         aws_request_dicts = self._get_requests_dicts(
-            dataset_name,
             variables,
             start_dt,
             end_dt,
@@ -235,13 +277,10 @@ class AWSDataAccessor:
                 {list(ds.data_vars)[0]: variable},
             )
 
-        # make an updates attributes dictionary
-        attrs_dict = self._write_attrs(dataset_name)
-
         # return the combined data
         return combine_variables(
             all_data_dict,
-            attrs_dict,
+            self.attrs_dict,
             epsg=4326,
         )
 
@@ -292,7 +331,6 @@ class AWSDataAccessor:
 
     def _get_requests_dicts(
         self,
-        dataset_name: str,
         variables: List[str],
         start_dt: datetime,
         end_dt: datetime,
@@ -308,7 +346,7 @@ class AWSDataAccessor:
         # iterate over variables and create requests
         for variable in variables:
             count = 0
-            if variable in self.dataset_variables[dataset_name]:
+            if variable in self.dataset_variables[self.dataset_name]:
                 endpoint_suffix = f'{variable}.nc'
             else:
                 warnings.warn(

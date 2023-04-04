@@ -4,10 +4,20 @@ from typing import (
     Dict,
     Union,
     Number,
+    TypedDict,
 )
 from datetime import datetime
 from xarray import Dataset
 from xarray_data_accessor.shared_types import BoundingBoxDict
+
+
+class AttrsDict(TypedDict):
+    dataset_name: str
+    institution: str
+    x_dim: str
+    y_dim: str
+    EPSG: int
+    time_step: str
 
 
 class DataAccessorBase(abc.ABC):
@@ -29,13 +39,14 @@ class DataAccessorBase(abc.ABC):
         """Returns all variables for each dataset that can be accessed."""
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def _write_attrs(
-        self,
-        dataset_name: str,
-        **kwargs,
-    ) -> Dict[str, Union[str, Number]]:
+    @abc.abstractproperty
+    def attrs_dict(self) -> AttrsDict:
         """Used to write aligned attributes to all sub datasets before merging"""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _parse_kwargs(self, kwargs_dict: TypedDict) -> None:
+        """Parses kwargs and sets class attributes."""
         raise NotImplementedError
 
     @abc.abstractmethod
