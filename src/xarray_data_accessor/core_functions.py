@@ -17,10 +17,70 @@ from typing import (
 from xarray_data_accessor.shared_types import (
     CoordsTuple,
     TableInput,
+    ShapefileInput,
+    RasterInput,
     ResampleDict,
     BoundingBoxDict,
     ResolutionTuple,
 )
+from xarray_data_accessor import utility_functions
+
+
+def get_bounding_box(
+    coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
+    csv: Optional[TableInput] = None,
+    shapefile: Optional[ShapefileInput] = None,
+    raster: Optional[RasterInput] = None,
+    union_bbox: bool = False,
+) -> BoundingBoxDict:
+    """Gets the bounding box from a variety of inputs.
+
+    NOTE: if multiple inputs are provided and param:union_bbox is False,
+        an error will be raised.
+
+    Arguments:
+        coords: a tuple or list of coordinate tuples (lat, lon).
+        csv: a csv file or dataframe of coordinates.
+        shapefile: a shapefile path or GeoDataFrame.
+        raster: a raster path or xarray dataset.
+        union_bbox: if True, returns the union of all bounding boxes.
+
+    Returns:
+        A bounding box dictionary.
+    """
+    # get inputs in a dict
+    inputs_dict = {
+        'coords': coords,
+        'csv': csv,
+        'shapefile': shapefile,
+        'raster': raster,
+    }
+
+    # make sure we are not using multiple inputs at once
+    if sum(x is not None for x in inputs_dict.values()) > 1 and not union_bbox:
+        raise ValueError(
+            'Only one input can be used at a time unless param:union_bbox=True!'
+        )
+
+    # get bounding boxes
+    outputs_dict = {}
+    for key, value in inputs_dict.items():
+        if value is not None:
+            if key == 'coords':
+                outputs_dict[key] = utility_functions._bbox_from_coords(value)
+            elif key == 'csv':
+                outputs_dict[key] = utility_functions._bbox_from_coords_csv(
+                    value)
+            elif key == 'shapefile':
+                outputs_dict[key] = utility_functions._bbox_from_shp(value)
+            elif key == 'raster':
+                outputs_dict[key] = utility_functions._bbox_from_raster(value)
+
+    # if we are unionizing the bounding boxes, do that, otherwise return the bbox
+    if union_bbox:
+        return utility_functions._unionize_bbox(list(outputs_dict.values()))
+    else:
+        return list(outputs_dict.values())[0]
 
 
 def resample_dataset(
