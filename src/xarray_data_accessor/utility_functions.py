@@ -131,6 +131,17 @@ def convert_timezone(
 
 
 # "Back-end" utility functions ###############################################
+def _prep_small_bbox(
+    bbox: BoundingBoxDict,
+) -> BoundingBoxDict:
+    """Converts a single point bbox to a small bbox with 0.1 degree sides"""
+    if bbox['north'] == bbox['south']:
+        bbox['north'] += 0.05
+        bbox['south'] -= 0.05
+    if bbox['east'] == bbox['west']:
+        bbox['east'] += 0.05
+        bbox['west'] -= 0.05
+    return bbox
 
 
 def _bbox_from_coords(
