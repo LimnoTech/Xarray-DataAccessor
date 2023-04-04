@@ -28,7 +28,6 @@ from types import ModuleType
 import xarray as xr
 import pandas as pd
 import numpy as np
-from rasterio.enums import Resampling
 
 # control weather to use dask for xarray computation
 try:
@@ -105,8 +104,8 @@ class DataAccessor:
         self.use_dask = use_dask
 
         # init start/end time
-        self.start_dt = self._get_datetime(start_time)
-        self.end_dt = self._get_datetime(end_time)
+        self.start_dt = self.__get_datetime(start_time)
+        self.end_dt = self.__get_datetime(end_time)
 
         # get AOI inputs set up
         inputs = {
