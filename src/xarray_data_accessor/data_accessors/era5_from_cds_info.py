@@ -9,15 +9,14 @@ https://cds.climate.copernicus.eu/
 All links below prefaced with:
 https://cds.climate.copernicus.eu/cdsapp#!/dataset/
 
-AWS single levels (hourly) data variables have different names and are stored
-    under AWS_VARIABLES_DICT. The standard CDS names are the dictionary keys,
+NOTE: AWS single levels (hourly) data variables have different names and are stored
+    under CDS_TO_AWS_NAMES_CROSSWALK. The standard CDS names are the dictionary keys,
     and the s3 bucket names are the values.
     s3 bucket docs: https://github.com/planet-os/notebooks/blob/master/aws/era5-pds.md
     dataset = 'reanalysis-era5-single-levels'.
 
-DATASETS 
+CDS ERA5 DATASETS 
 --------------------------------
-
 Single levels (hourly) variables
 * reanalysis-era5-single-levels
 * reanalysis-era5-single-levels-preliminary-back-extension
@@ -36,11 +35,9 @@ ERA5-land variables
 * reanalysis-era5-land
 * reanalysis-era5-land-monthly-means
 """
-# data sources and dataset names
-DATASET_SOURCES = ('CDS', 'AWS')
 
-
-AWS_VARIABLES_DICT = {
+# a crosswalk between the CDS variable names and the AWS s3 bucket names
+CDS_TO_AWS_NAMES_CROSSWALK = {
     '10m_u_component_of_wind': 'eastward_wind_at_10_metres',
     '10m_v_component_of_wind': 'northward_wind_at_10_metres',
     '100m_u_component_of_wind': 'eastward_wind_at_100_metres',
