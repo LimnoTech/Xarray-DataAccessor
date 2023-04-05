@@ -37,8 +37,8 @@ class DataAccessorFactory:
     @classmethod
     def supported_datasets(cls) -> Dict[str, List[str]]:
         if not cls.__supported_datasets:
-            for name, data_accessor in cls.__data_accessors.items():
-                cls.__supported_datasets[name] = data_accessor.supported_datasets
+            for name, da in cls.__data_accessors.items():
+                cls.__supported_datasets[name] = da.supported_datasets()
         return cls.__supported_datasets
 
     @classmethod
