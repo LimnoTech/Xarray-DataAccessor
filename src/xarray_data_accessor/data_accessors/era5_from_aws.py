@@ -271,10 +271,10 @@ class AWSDataAccessor(DataAccessorBase):
             else:
                 ds = datasets[0]
 
-            # drop every variable except the one we want
+            # drop every variable except the one we want (works for aws)
             for var in ds.data_vars:
-                if var.name != variable:
-                    ds = ds.drop_vars(var.name)
+                if var != variable:
+                    ds = ds.drop_vars(var)
 
             all_data_dict[variable] = ds.rename(
                 {list(ds.data_vars)[0]: variable},
