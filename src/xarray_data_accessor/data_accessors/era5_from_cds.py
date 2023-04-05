@@ -312,13 +312,14 @@ class CDSDataAccessor(DataAccessorBase):
                     },
                 )
 
-                try:
-                    all_data_dict[variable] = ds.rename(
-                        {list(ds.data_vars)[0]: variable},
-                    )
-                except ValueError:
-                    # TODO: fix logic here
-                    all_data_dict[variable] = ds
+                # drop every variable except the one we want
+                for var in ds.data_vars:
+                    if var.name != variable:
+                        ds = ds.drop_vars(var.name)
+
+                all_data_dict[variable] = ds.rename(
+                    {list(ds.data_vars)[0]: variable},
+                )
 
         # return the combined data
         return combine_variables(

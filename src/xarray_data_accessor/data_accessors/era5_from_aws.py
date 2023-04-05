@@ -271,17 +271,14 @@ class AWSDataAccessor(DataAccessorBase):
             else:
                 ds = datasets[0]
 
-            # drop time bounds
-            if 'time1_bounds' in ds.data_vars:
-                ds = ds.drop_vars('time1_bounds')
+            # drop every variable except the one we want
+            for var in ds.data_vars:
+                if var.name != variable:
+                    ds = ds.drop_vars(var.name)
 
-            try:
-                all_data_dict[variable] = ds.rename(
-                    {list(ds.data_vars)[0]: variable},
-                )
-            except ValueError:
-                # TODO: improve this logic. it fails is it already has the name.
-                all_data_dict[variable] = ds
+            all_data_dict[variable] = ds.rename(
+                {list(ds.data_vars)[0]: variable},
+            )
 
         # return the combined data
         return combine_variables(
