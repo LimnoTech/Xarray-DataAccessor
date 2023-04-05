@@ -204,14 +204,14 @@ def convert_timezone(
     tz = pytz.timezone(timezone)
 
     # Convert the datetime index to the specified timezone
-    xarray_dataset['time'] = (
+    new_time = (
         xarray_dataset['time']
         .to_pandas()
         .tz_localize('UTC')
         .tz_convert(tz)
     )
 
-    return xarray_dataset
+    return xarray_dataset.assign_coords(time=new_time)
 
 
 def resample_dataset(
