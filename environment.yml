@@ -1,4 +1,4 @@
-name: era5_to_xarray
+name: xarray_data_accessor_env
 channels:
   - conda-forge
   - nodefaults
