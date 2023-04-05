@@ -1,44 +1,116 @@
-# ERA5-to-Xarray
+Xarray-DataAccessor Documentation
+==================================
 
-**NOTE:** Change name to something more generic!
+## Core Features
+* Efficiently reads remote gridded data for an Area of Interest (AOI) into [Xarray.Dataset](https://docs.xarray.dev/en/stable/) objects using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization.
+* Transform data for your needs: resample the grid, resample along a time dimension, convert timezone, etc.
+* Extract time series data at coordinates and save to a tabular file (i.e. .xlsx, .csv, or .parquet) for use in physical or machine learning models.
+* Extendable/modular package architecture supporting open-source contributions, and connections to more datasets/sources.
 
-**IMPORTANT NOTE:** While reading data from AWS is much faster, loading the date to disk from it is **MUCH** slower than when using local netcdf or zarr files. One can use the `use_cdf_only` keyword argument to make sure all ERA5 data is loaded from temporary local netcdf files downloaded via the CDS API. A case where this would be desirable is if you plan to sample at points from the data (will speed up performance 100+x). If you are visualizing the data, or manipulating it within xarray natively, it is faster to just stick with the default and access AWS when possible.
+## Getting Started
+1. Start by cloning this repository locally.
+2. Next, within an conda terminal navigate to the local repository location and clone and activate our conda virtual environment using `environment.yml`.
+```
+# mock conda terminal
+(base) C://User: cd Path/To/Xarray-DataAccessor
+(base) C://User/Path/To/Xarray-DataAccessor conda env create -f environment.yml
+...
+(base) C://User/Path/To/Xarray-DataAccessor conda activate xarray_data_accessor_env
+(xarray_data_accessor_env) C://User/Path/To/Xarray-DataAccessor
+```
+3. (optional) if you plan to use the `CDSDataAccessor`, follow the instructions [here](https://cds.climate.copernicus.eu/api-how-to) to allow your computer to interact with the CDS API. Basically you must manually make a `.cdsapirc` text file (no extension!) where `cdsapi.Client()` expects it to be.
+4. Use the [conda-develop](https://docs.conda.io/projects/conda-build/en/latest/resources/commands/conda-develop.html) `build` command pointed to the `/src/` directory to make the repo importable.
+```
+# mock conda terminal with the env activated
+(xarray_data_accessor_env) C://User/Path/To/Xarray-DataAccessor conda-build src
+
+# a this point you are ready to open an IDE/Notebook of your choice to run your code!
+# For example:
+(xarray_data_accessor_env) C://User/Path/To/Xarray-DataAccessor jupyterlab
+```
+5. Finally, import the library into your workflow:
+```python
+import xarray_data_accessor
+```
+
+## Exploring Available Data
+All data one can retrieve with this library is organized in a three tier hierarchy:
+1. A "data accessor" is a python class that interacts with a given data source. 
+    * Each data accessor can retrieve data from any number of specific datasets.
+    * For example: `CDSDataAccessor` accesses the [CDS API](https://cds.climate.copernicus.eu/cdsapp#!/search?type=dataset) and can currently be used to access a few ERA5 datasets.
+2. A specific dataset may be something like "reanalysis-era5-single-levels". Note that the same dataset may be able to be accessed by different data accessors.
+3. Each dataset will contain one or more variables.
+
+To allow this library to be extendable, the "data accessors", the datasets they can access, and the variables that exist in each dataset are not hardcoded anywhere in the repo. 
+
+**Therefore to explore what is available, one can use the following `xarray_data_accessor.DataAccessorFactory` class functions:**
+```python
+from xarray_data_accessor import DataAccessorFactory
+
+# to return a list of all data accessor names
+DataAccessorFactory.data_accessor_names()
+
+# to return a dictionary with data accessor names as keys and their respective objects and values
+DataAccessorFactory.data_accessor_objects()
+
+# to return a dictionary with data accessor names as keys, and their supported dataset names as values
+DataAccessorFactory.supported_datasets()
+
+# to return a list of variable names for a specific data accessor - dataset combination
+DataAccessorFactory.supported_variables(
+    data_accessor_name: str,
+    dataset_name: str,
+)
+```
+
+We also intend to keep documentation about data accessors and their respective datasets updated [here](https://github.com/LimnoTech/Xarray-DataAccessor/blob/main/Data_Sources_Info.md).
+
+## Getting Data
+To get data one can use the `get_xarray_dataset()` function after specifying time and space AOI.
+
+The spatial AOI can be specified with a shapefile, raster, a list of lat/long coordinate tuples, or a csv with lat/lon as columns.
+
+The temporal AOI can be specified as a string or a datetime object. Additionally, one can specify a timezone using `param:timezone`.
+
+In the example below we fetch ERA5 data from AWS for a shapefile defined extent.
+```python
+import xarray_data_accessor
+dataset = xarray_data_accessor.get_xarray_dataset(
+        data_accessor_name='AWSDataAccessor',
+        dataset_name='reanalysis-era5-single-levels',
+        variables=[
+            'air_temperature_at_2_metres',
+            'eastward_wind_at_100_metres',
+        ],
+        start_time='2019-01-30',
+        end_time='2019-02-02',
+        shapefile='path/to/shapefile.shp',
+    )
+```
 
 
-A repo to efficiently read data into [Xarray](https://docs.xarray.dev/en/stable/) using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization via the CDS API or s3 AWS bucket.
+## Transforming Data
+Functionality has not been thoroughly tested...documentation pending.
 
-Based on [`era5cli`](https://github.com/eWaterCycle/era5cli)'s source code.
+## Development Road Map
 
-**Features to build:**
-* CDS API call object.
-* An object that inherits from that for each relevant dataset.
-* support pressure levels query
+- [x] Build out base architecture and library design.
+- [x] Build `CDSDataAccessor` to retrieve ERA5 hourly data from the CDS API.
+- [x] Build `AWSDataAccessor` to retrieve ERA5 hourly data from the Planet OS S3 bucket.
+- [x] Build a function to spatially resample data.
+- [x] Build a function to convert data timezones.
+- [x] Build a function to sample data across the time dimension and export to a table file.
+- [x] Build a `pytest` test suite for the two ERA5 data accessors as well as the `DataAccessorFactory` class functions.
+- [x] Set up documentation structure.
+- [] Build a `DataAccessorBase` implementation to fetch elevation data.
+- [] Build a function to temporally resample data.
+- [] Build a `pytest` test suite for all the data transformation functions.
+- [] Build "Data Stacks" that align data from different sources such that it is ready for modelling.
 
-# Datasets 
-## Copernicus Data Store API
-[**API Documentation**](https://cds.climate.copernicus.eu/)
 
-**Single levels (hourly) datasets - [info](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview)**
-* reanalysis-era5-single-levels
-* reanalysis-era5-single-levels-preliminary-back-extension
 
-**Single levels (monthly) datasets - [info](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels-monthly-means?tab=overview)**
-* reanalysis-era5-single-levels-monthly-means
-* reanalysis-era5-single-levels-monthly-means-preliminary-back-extension
 
-**Pressure levels datasets - [info](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-pressure-levels?tab=overview)**
-* reanalysis-era5-pressure-levels
-* reanalysis-era5-pressure-levels-monthly-means
-* reanalysis-era5-pressure-levels-preliminary-back-extension
-* reanalysis-era5-pressure-levels-monthly-means-preliminary-back-extension
 
-**ERA5-land datasets - [info](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land?tab=overview)**
-* reanalysis-era5-land
-* reanalysis-era5-land-monthly-means
 
-## Planet OS AWS bucket
-ERA-5 single/surface level data is available on an [AWS s3 bucket](https://aws.amazon.com/marketplace/pp/prodview-yhz3mavy6s7go#similar-products). However, there are far fewer variables available, and the data goes back to 1979 (as opposed to 1959).
 
-By default, data will be pulled from the AWS bucket if possible since it allows one to avoid saving large NetCDF files.
 
-See the Planet OS [documentation](https://github.com/planet-os/notebooks/blob/master/aws/era5-pds.md) for a list of available variables.
