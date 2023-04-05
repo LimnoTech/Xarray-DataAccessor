@@ -1,4 +1,7 @@
-"""Test the ERA5 data retrieval and processing using both CDS and AWS."""
+"""Test the ERA5 data retrieval and processing using both CDS and AWS.
+
+NOTE: to see print outputs one must use the $pytest -rx$ command.
+"""
 import xarray_data_accessor
 import time
 import xarray as xr
@@ -6,10 +9,16 @@ from pathlib import Path
 from typing import List
 
 TEST_SHP = Path.cwd() / 'test_data/LEEM_boundary.shp'
-CDS_VARIABLES = ['2m_temperature', '100m_u_component_of_wind']
-AWS_VARIABLES = ['air_temperature_at_2_metres', 'eastward_wind_at_100_metres']
+CDS_VARIABLES = [
+    '2m_temperature',
+    '100m_u_component_of_wind',
+]
+AWS_VARIABLES = [
+    'air_temperature_at_2_metres',
+    'eastward_wind_at_100_metres',
+]
 
-# define data retrieval functions
+# DEFINE DATA RETRIEVAL FUNCTIONS ####################################
 
 
 def cds_retrieval(
@@ -39,33 +48,18 @@ def aws_retrieval(
         shapefile=bbox_shapefile,
     )
 
-
-# use data retrieval functions to get data and keep track of performance
-# NOTE: to see print outputs one must use the $pytest -rx$ command
-p1 = time.perf_counter()
-cds_era5_dataset = cds_retrieval()
-p2 = time.perf_counter()
-print(f'cds_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
-
-p1 = time.perf_counter()
-aws_era5_dataset = aws_retrieval()
-p2 = time.perf_counter()
-print(f'aws_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
-
-# get bounding box
-bbox = xarray_data_accessor.get_bounding_box(
-    shapefile=TEST_SHP,
-)
-
-# run tests
+# RUN TESTS ########################################################
 
 
-def test_bounding_box(
-    bounding_box: xarray_data_accessor.shared_types.BoundingBoxDict = bbox,
-) -> None:
+def test_bounding_box() -> None:
     """Test the bounding box."""
+    # get the bounding box dictionary
+    bbox = xarray_data_accessor.get_bounding_box(
+        shapefile=TEST_SHP,
+    )
+
     # assert it is as expected
-    assert bounding_box == {
+    assert bbox == {
         'west': -83.47519999999993,
         'south': 41.382849899000156,
         'east': -78.85399999999997,
@@ -73,11 +67,14 @@ def test_bounding_box(
     }
 
 
-def test_cds_dataset(
-    cds_era5_dataset: xr.Dataset = cds_era5_dataset,
-    bounding_box: xarray_data_accessor.shared_types.BoundingBoxDict = bbox,
-) -> None:
+def test_cds_dataset() -> None:
     """Test the CDS dataset."""
+
+    # get the data
+    p1 = time.perf_counter()
+    cds_era5_dataset = cds_retrieval()
+    p2 = time.perf_counter()
+    print(f'cds_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
 
     # make assertions about the dataset
     assert isinstance(cds_era5_dataset, xr.Dataset)
@@ -118,18 +115,18 @@ def test_cds_dataset(
     assert cds_era5_dataset.attrs['EPSG'] == 4326
     assert cds_era5_dataset.spatial_ref.attrs['geographic_crs_name'] == 'WGS 84'
 
-    # check bounding box
-    #assert bounding_box['west'] >= cds_era5_dataset.longitude.min().item()
-    #assert bounding_box['east'] <= cds_era5_dataset.longitude.max().item()
-    #assert bounding_box['south'] >= cds_era5_dataset.latitude.min().item()
-    #assert bounding_box['north'] <= cds_era5_dataset.latitude.max().item()
+    # delete temp files
+    xarray_data_accessor.delete_temp_files()
 
 
-def test_aws_dataset(
-    aws_era5_dataset: xr.Dataset = aws_era5_dataset,
-    bounding_box: xarray_data_accessor.shared_types.BoundingBoxDict = bbox,
-) -> None:
+def test_aws_dataset() -> None:
     """Test the AWS dataset."""
+
+    # get the data
+    p1 = time.perf_counter()
+    aws_era5_dataset = aws_retrieval()
+    p2 = time.perf_counter()
+    print(f'aws_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
 
     # make assertions about the dataset
     assert isinstance(aws_era5_dataset, xr.Dataset)
@@ -169,13 +166,3 @@ def test_aws_dataset(
     # check the spatial reference (note WGS 84 corresponds to EPSG:4326)
     assert aws_era5_dataset.attrs['EPSG'] == 4326
     assert aws_era5_dataset.spatial_ref.attrs['geographic_crs_name'] == 'WGS 84'
-
-    # check bounding box
-    #assert bounding_box['west'] >= aws_era5_dataset.longitude.min().item()
-    #assert bounding_box['east'] <= aws_era5_dataset.longitude.max().item()
-    #assert bounding_box['south'] >= aws_era5_dataset.latitude.min().item()
-    #assert bounding_box['north'] <= aws_era5_dataset.latitude.max().item()
-
-
-# delete temp files
-xarray_data_accessor.delete_temp_files()
