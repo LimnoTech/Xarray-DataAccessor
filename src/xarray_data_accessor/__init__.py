@@ -17,3 +17,4 @@ from xarray_data_accessor.core_functions import (
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
 )
+import xarray_data_accessor.shared_types as shared_types
