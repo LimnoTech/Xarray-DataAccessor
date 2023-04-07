@@ -87,6 +87,7 @@ def test_cds_dataset() -> None:
 
     # check time dimensions
     assert cds_era5_dataset.attrs['time_step'] == 'hourly'
+    assert cds_era5_dataset.attrs['time_zone'] == 'UTC'
     assert len(cds_era5_dataset.time) == 73
     assert cds_era5_dataset.time.dtype == 'datetime64[ns]'
     assert cds_era5_dataset.time[0].item() == 1548806400000000000
@@ -139,6 +140,7 @@ def test_aws_dataset() -> None:
 
     # check time dimensions
     assert aws_era5_dataset.attrs['time_step'] == 'hourly'
+    assert aws_era5_dataset.attrs['time_zone'] == 'UTC'
     assert len(aws_era5_dataset.time) == 73
     assert aws_era5_dataset.time.dtype == 'datetime64[ns]'
     assert aws_era5_dataset.time[0].item() == 1548806400000000000
