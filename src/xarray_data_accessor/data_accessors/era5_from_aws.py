@@ -137,6 +137,7 @@ class AWSDataAccessor(DataAccessorBase):
         attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
+        attrs['time_zone'] = 'UTC'
         attrs['time_step'] = 'hourly'
         return attrs
 

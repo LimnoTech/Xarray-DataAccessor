@@ -129,6 +129,7 @@ class CDSDataAccessor(DataAccessorBase):
             attrs['time_step'] = 'monthly'
         else:
             attrs['time_step'] = 'hourly'
+        attrs['time_zone'] = 'UTC'
         return attrs
 
     def _parse_kwargs(
