@@ -196,7 +196,8 @@ def _verify_variables(
     variables: Optional[Union[str, List[str]]] = None,
 ) -> List[str]:
     if variables is None:
-        return list(xarray_dataset.data_vars)
+        drops = ['spatial_ref']
+        return [i for i in list(xarray_dataset.data_vars) if i not in drops]
     elif isinstance(variables, str):
         variables = [variables]
 
@@ -239,8 +240,30 @@ def _get_coords_df(
             coords_df.set_index(coords_id_column, inplace=True)
 
     elif coords is not None:
-        # TODO: build a dataframe
-        raise NotImplementedError
+        # get lon/lat coordinates
+        if isinstance(coords, tuple):
+            coords = [coords]
+        ids = pd.Index(
+            data=[i for i in range(len(coords))],
+            dtype='int32',
+            name='point_id',
+        )
+        lons = pd.Series(
+            data=[c[0] for c in coords],
+            dtype='float32',
+            name='lon',
+            index=ids,
+        )
+        lats = pd.Series(
+            data=[c[1] for c in coords],
+            dtype='float32',
+            name='lat',
+            index=ids,
+        )
+        coords_df = pd.concat(
+            [lons, lats],
+            axis=1,
+        )
     else:
         raise ValueError(
             'Must specify either param:coords or param:csv_of_coords'
