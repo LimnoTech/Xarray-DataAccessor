@@ -18,7 +18,7 @@ def test_name_space():
         'get_xarray_dataset',
         'get_bounding_box',
         'convert_timezone',
-        'resample_dataset',
+        'spatial_resample',
         'get_data_tables',
         'delete_temp_files',
     ]

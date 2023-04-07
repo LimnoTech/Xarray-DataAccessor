@@ -121,7 +121,7 @@ def get_xarray_dataset(
 
     # resample data is necessary
     if resample_factor or xy_resolution_factors:
-        xarray_dataset = resample_dataset(
+        xarray_dataset = spatial_resample(
             xarray_dataset,
             resolution_factor=resample_factor,
             xy_resolution_factors=xy_resolution_factors,
@@ -200,6 +200,11 @@ def convert_timezone(
     :param timezone: string specifying the desired timezone
     :return: xarray dataset with the converted datetime index
     """
+    # TODO: this will involve a a bit more work since the numpy datetime64 does not support timezones
+    # I have now added time_zone to the attrs, so make sure we change that too
+    # we may need to convert to pandas datetime index, change the timezone, and then convert back
+    # to numpy datetime64 array, then change attrs
+    raise NotImplementedError
     # Get the desired timezone
     tz = pytz.timezone(timezone)
 
@@ -214,7 +219,7 @@ def convert_timezone(
     return xarray_dataset.assign_coords(time=new_time)
 
 
-def resample_dataset(
+def spatial_resample(
     xarray_dataset: xr.Dataset,
     resolution_factor: Optional[Union[int, float]] = None,
     xy_resolution_factors: Optional[ResolutionTuple] = None,
@@ -306,6 +311,7 @@ def resample_dataset(
 
 
 def get_data_tables(
+    xarray_dataset: xr.Dataset,
     variables: Optional[List[str]] = None,
     coords: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
     csv_of_coords: Optional[TableInput] = None,
@@ -325,7 +331,10 @@ def get_data_tables(
     out_dict = {}
 
     # clean variables input
-    variables = utility_functions._verify_variables(variables)
+    variables = utility_functions._verify_variables(
+        xarray_dataset,
+        variables,
+    )
 
     # get x/y columns
     if xy_columns is None:
@@ -394,6 +403,7 @@ def get_data_tables(
     # get data for each variable
     for variable in variables:
         out_dict[variable] = utility_functions._get_data_table_vectorized(
+            xarray_dataset,
             variable,
             point_ids,
             id_to_index,
