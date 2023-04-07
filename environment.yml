@@ -23,6 +23,7 @@ dependencies:
   - pyarrow
   - zarr
   - h5netcdf
+  - openpyxl
 
   # Interactivity & Visualization (optional, but required for viz)
   - jupyterlab
