@@ -31,9 +31,9 @@ dependencies:
   - cartopy
 
   # get holoviews libs from pyviz
-  - holoviews
+  - holoviews >=1.12.0
   - hvplot
-  - geoviews
+  - geoviews >=1.6.2 # pinned to avoid this issue: https://github.com/holoviz/geoviews/issues/334
 
 # Dev tools: Language Server Protocol (LSP) (Optional), for:
   - python-lsp-server # LSP extension for Python (pylsp), including:
