@@ -1,10 +1,11 @@
 name: xarray_data_accessor_env
 channels:
   - conda-forge
+  - pyviz
   - nodefaults
 
 dependencies:
-  - python =3.11
+  - python >=3.10
 
   # For data processing 
   - pandas
@@ -17,20 +18,22 @@ dependencies:
   - cdsapi
   - fsspec
   - s3fs
-  - h5netcdf
   - cfgrib
   - eccodes
   - pyarrow
   - zarr
+  - h5netcdf
 
   # Interactivity & Visualization (optional, but required for viz)
   - jupyterlab
   - ipympl
   - nodejs
-  - hvplot
-  - holoviews
-  - geoviews
   - cartopy
+
+  # get holoviews libs from pyviz
+  - holoviews
+  - hvplot
+  - geoviews
 
 # Dev tools: Language Server Protocol (LSP) (Optional), for:
   - python-lsp-server # LSP extension for Python (pylsp), including:
@@ -40,6 +43,9 @@ dependencies:
 
   # Package management
   - conda
+  - conda-build # to self install library
   - mamba
   - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
   - pip
+
+
