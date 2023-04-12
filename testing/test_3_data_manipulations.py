@@ -17,25 +17,19 @@ TEST_DATASET = xr.open_dataset(TEST_NETCDF)
 TEST_DATASET = TEST_DATASET.rio.write_crs(TEST_DATASET.attrs['EPSG'])
 
 
-def test_timezone_change(
+def test_timezone_subset(
     test_dataset: xr.Dataset = TEST_DATASET,
 ) -> None:
-    # TODO: implement when we get the conversion working
-    # check starting timezone
-    # tz1 = test_dataset.time.tz
-    # time_index_1 = test_dataset.time.values[0]
-    # assert tz1 == 'UTC'
-    #
-    # convert timezones to America/New_York
-    # test_dataset = xarray_data_accessor.convert_timezone(
-    #    xarray_dataset=test_dataset,
-    #    timezone='America/New_York',
-    # )
-    # tz2 = test_dataset.time.tz
-    # time_index_2 = test_dataset.time.values[0]
-    # assert tz2 == 'America/New_York'
-    # assert time_index_1 != time_index_2
-    assert True == True
+    """Tests if we can subset by a different timezone."""
+    subset = xarray_data_accessor.subset_time_by_timezone(
+        xarray_dataset=test_dataset,
+        timezone='US/Eastern',
+        end_time='2019-02-01T10:00:00.000000000',
+    )
+    assert len(subset.time) != len(test_dataset.time)
+    assert len(subset.time) == 64
+    assert subset.time[-1].item() == 1549033200000000000
+    del subset
 
 
 def _get_resample_method_name() -> List[str]:
@@ -75,14 +69,6 @@ def test_spatial_resample(
         )
         assert len(test_dataset_rs2.longitude) == 19
         assert len(test_dataset_rs2.latitude) == 21
-
-
-def test_time_resample(
-    test_dataset: xr.Dataset = TEST_DATASET,
-) -> None:
-    """Tests if time resampling is working as expected."""
-    # TODO: implement
-    assert True == True
 
 
 def test_to_table(

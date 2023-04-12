@@ -228,18 +228,18 @@ def subset_time_by_timezone(
             'The dataset is lacking a timezone attribute! Assuming UTC.'
         )
         out_timezone = 'UTC'
-    out_timezone = xarray_dataset.attrs['timezone']
+    out_timezone = xarray_dataset.attrs['time_zone']
 
     # convert times to match the xarray dataset timezone
     if start_time:
         start_time = utility_functions._convert_timezone(
-            start_time,
+            utility_functions._get_datetime(start_time),
             in_timezone=timezone,
             out_timezone=out_timezone,
         )
     if end_time:
         end_time = utility_functions._convert_timezone(
-            end_time,
+            utility_functions._get_datetime(end_time),
             in_timezone=timezone,
             out_timezone=out_timezone,
         )

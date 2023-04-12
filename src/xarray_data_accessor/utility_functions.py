@@ -68,6 +68,7 @@ def _convert_timezone(
         datetime_obj
         .tz_localize(pytz.timezone(in_timezone))
         .astimezone(pytz.timezone(out_timezone))
+        .replace(tzinfo=None)
     )
 
 
