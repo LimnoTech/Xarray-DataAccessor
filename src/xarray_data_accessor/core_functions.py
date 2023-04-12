@@ -41,7 +41,6 @@ def get_xarray_dataset(
     shapefile: Optional[ShapefileInput] = None,
     raster: Optional[RasterInput] = None,
     combine_aois: bool = False,
-    timezone: Optional[str] = None,
     resample_factor: Optional[int] = None,
     xy_resolution_factors: Optional[ResolutionTuple] = None,
     resample_method: Optional[str] = None,
@@ -64,7 +63,6 @@ def get_xarray_dataset(
         :param aoi_shapefile: A shapefile (.shp) to define the AOI.
         :param aoi_raster: A raster to define the AOI.
         :param combine_aois: If True, combines all AOIs into one.
-        :param timezone: The timezone to use for the start/end times.
         :param resample_factor: The factor to resample the data by.
         :param xy_resolution_factors: The X,Y dimension factors to resample the data by.
         :param kwargs: Additional keyword arguments to pass to 
@@ -111,13 +109,6 @@ def get_xarray_dataset(
         bbox=bounding_box,
         kwargs=kwargs,
     )
-
-    # change timezone if necessary
-    if timezone:
-        xarray_dataset = convert_timezone(
-            xarray_dataset,
-            timezone,
-        )
 
     # resample data is necessary
     if resample_factor or xy_resolution_factors:
@@ -189,34 +180,28 @@ def get_bounding_box(
         return list(outputs_dict.values())[0]
 
 
-def convert_timezone(
+def subset_time_by_timezone(
     xarray_dataset: xr.Dataset,
     timezone: str,
+    start_time: Optional[TimeInput] = None,
+    end_time: Optional[TimeInput] = None,
 ) -> xr.Dataset:
-    """
-    Convert the datetime index of an xarray dataset to a specified timezone.
+    """Subsets the time dimension using a user supplied time zone
 
-    :param data: xarray dataset with a time dimension
-    :param timezone: string specifying the desired timezone
-    :return: xarray dataset with the converted datetime index
+    Xarray does not allow for timezone based indexes. This function
+    acts as a simple pytz wrapper to subselect data using a local timezone.
+
+    Arguments:
+        :param xarray_dataset: The xarray dataset to subset.
+        :param timezone: A valid pytz timezone string. 
+            Example: 'America/New_York'
+        :start_time: The start time to subset from.
+        :end_time: The end time to subset to.
+
+    Return:
+        The subset xarray dataset.
     """
-    # TODO: this will involve a a bit more work since the numpy datetime64 does not support timezones
-    # I have now added time_zone to the attrs, so make sure we change that too
-    # we may need to convert to pandas datetime index, change the timezone, and then convert back
-    # to numpy datetime64 array, then change attrs
     raise NotImplementedError
-    # Get the desired timezone
-    tz = pytz.timezone(timezone)
-
-    # Convert the datetime index to the specified timezone
-    new_time = (
-        xarray_dataset['time']
-        .to_pandas()
-        .tz_localize('UTC')
-        .tz_convert(tz)
-    )
-
-    return xarray_dataset.assign_coords(time=new_time)
 
 
 def spatial_resample(
