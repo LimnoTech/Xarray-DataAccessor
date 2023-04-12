@@ -2,6 +2,8 @@
 import logging
 import warnings
 from datetime import datetime
+import pytz
+from pytz.exceptions import UnknownTimeZoneError
 import xarray as xr
 import pandas as pd
 import numpy as np
@@ -44,6 +46,29 @@ def _get_datetime(input_date: TimeInput) -> datetime:
         raise ValueError(
             f'start/end date input={input_date} is invalid.'
         )
+
+
+def _convert_timezone(
+    datetime_obj: datetime,
+    in_timezone: str,
+    out_timezone: str,
+) -> datetime:
+    """Converts a datetime object to a different timezone."""
+    # check if timezone is valid
+    for tz in [in_timezone, out_timezone]:
+        if tz not in pytz.all_timezones:
+            raise UnknownTimeZoneError(
+                f'Invalid timezone={tz}. '
+                f'See https://en.wikipedia.org/wiki/List_of_tz_database_time_zones '
+                f'for a list of timezone identified strings (TZ identifier)'
+            )
+
+    # return converted datetime
+    return (
+        datetime_obj
+        .tz_localize(pytz.timezone(in_timezone))
+        .astimezone(pytz.timezone(out_timezone))
+    )
 
 
 def _prep_small_bbox(

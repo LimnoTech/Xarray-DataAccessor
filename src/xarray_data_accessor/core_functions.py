@@ -36,6 +36,7 @@ def get_xarray_dataset(
     variables: Union[str, List[str]],
     start_time: TimeInput,
     end_time: TimeInput,
+    start_end_timezone: Optional[str] = None,
     coordinates: Optional[Union[CoordsTuple, List[CoordsTuple]]] = None,
     csv_of_coords: Optional[TableInput] = None,
     shapefile: Optional[ShapefileInput] = None,
@@ -58,6 +59,9 @@ def get_xarray_dataset(
             of data accessor + dataset names to supported variables.
         :param start_time: Time/date to start at (inclusive).
         :param end_time: Time/date to stop at (exclusive).
+        :param start_end_timezone: The timezone for start/end time (default is UTC).
+            NOTE: See list of possible timezones at the link below
+            https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
         :param aoi_coordinates: Coordinates to define the AOI.
         :param aoi_csv_of_coords: A csv of lat/longs to define the AOI.
         :param aoi_shapefile: A shapefile (.shp) to define the AOI.
@@ -88,10 +92,23 @@ def get_xarray_dataset(
     if isinstance(coordinates, tuple):
         coordinates = [coordinates]
 
-    # define time and space AOI
+    # define time AOI and convert timezone if necessary
     start_dt = utility_functions._get_datetime(start_time)
     end_dt = utility_functions._get_datetime(end_time)
 
+    if start_end_timezone:
+        start_dt = utility_functions._convert_timezone(
+            start_dt,
+            in_timezone=start_end_timezone,
+            out_timezone='UTC',
+        )
+        end_dt = utility_functions._convert_timezone(
+            end_dt,
+            in_timezone=start_end_timezone,
+            out_timezone='UTC',
+        )
+
+    # define spatial AOI
     bounding_box = get_bounding_box(
         coords=coordinates,
         csv=csv_of_coords,
@@ -195,13 +212,30 @@ def subset_time_by_timezone(
         :param xarray_dataset: The xarray dataset to subset.
         :param timezone: A valid pytz timezone string. 
             Example: 'America/New_York'
-        :start_time: The start time to subset from.
-        :end_time: The end time to subset to.
+        :start_time: The start time input to subset from.
+        :end_time: The end time input to subset to.
 
     Return:
         The subset xarray dataset.
     """
-    raise NotImplementedError
+    # convert times to UTC
+    if start_time:
+        start_time = utility_functions._convert_timezone(
+            start_time,
+            in_timezone=timezone,
+            out_timezone='UTC',
+        )
+    if end_time:
+        end_time = utility_functions._convert_timezone(
+            end_time,
+            in_timezone=timezone,
+            out_timezone='UTC',
+        )
+
+    # subset dataset
+    return xarray_dataset.sel(
+        time=slice(start_time, end_time),
+    )
 
 
 def spatial_resample(
