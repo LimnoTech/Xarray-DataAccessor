@@ -218,18 +218,30 @@ def subset_time_by_timezone(
     Return:
         The subset xarray dataset.
     """
-    # convert times to UTC
+    # check if necessary dimensions exist
+    if 'time' not in xarray_dataset.dims:
+        raise ValueError(
+            'The dataset must have a time dimension to subset by timezone!'
+        )
+    if 'timezone' not in xarray_dataset.attrs.keys():
+        warnings.warn(
+            'The dataset is lacking a timezone attribute! Assuming UTC.'
+        )
+        out_timezone = 'UTC'
+    out_timezone = xarray_dataset.attrs['timezone']
+
+    # convert times to match the xarray dataset timezone
     if start_time:
         start_time = utility_functions._convert_timezone(
             start_time,
             in_timezone=timezone,
-            out_timezone='UTC',
+            out_timezone=out_timezone,
         )
     if end_time:
         end_time = utility_functions._convert_timezone(
             end_time,
             in_timezone=timezone,
-            out_timezone='UTC',
+            out_timezone=out_timezone,
         )
 
     # subset dataset
