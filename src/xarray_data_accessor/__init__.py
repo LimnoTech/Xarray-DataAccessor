@@ -18,3 +18,5 @@ from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
 )
 import xarray_data_accessor.shared_types as shared_types
+
+from xarray_data_accessor.multi_threading import get_multithread

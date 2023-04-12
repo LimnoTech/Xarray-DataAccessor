@@ -8,10 +8,10 @@ class DaskClass:
 
     def __init__(
         self,
-        n_workers: int,
+        n_workers: Optional[int] = None,
         threads_per_worker: Optional[int] = None,
-        processes: bool = True,
-        close_existing_client: bool = False,
+        processes: Optional[bool] = True,
+        close_existing_client: Optional[bool] = False,
     ) -> None:
 
         # make sure a dask class is not already running
@@ -32,6 +32,7 @@ class DaskClass:
 
         # if one is running
         if len(DaskClass.dask_classes) > 0:
+            # TODO: warn if desired parameters are different from existing client
             dask_class = DaskClass.dask_classes[-1]
             self.cluster = dask_class.cluster
             self.client = Client(self.cluster)
@@ -52,11 +53,11 @@ class DaskClass:
 
 
 def get_multithread(
-    use_dask: bool,
-    n_workers: int,
-    threads_per_worker: int,
-    processes: bool = True,
-    close_existing_client: bool = False,
+    use_dask: Optional[bool] = True,
+    n_workers: Optional[int] = None,
+    threads_per_worker: Optional[int] = None,
+    processes: Optional[bool] = True,
+    close_existing_client: Optional[bool] = False,
 ) -> Tuple[object, callable]:
     """Give you a multithread/process executer.
 
