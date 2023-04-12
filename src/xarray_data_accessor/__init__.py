@@ -11,6 +11,7 @@ from xarray_data_accessor.core_functions import (
     get_bounding_box,
     spatial_resample,
     get_data_tables,
+    subset_time_by_timezone,
     delete_temp_files,
 )
 from xarray_data_accessor.data_accessors.factory import (
