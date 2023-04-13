@@ -5,6 +5,8 @@ Data Sources Info
 ### **Copernicus Data Store API - `CDSDataAccessor`**
 [API Documentation](https://cds.climate.copernicus.eu/)
 
+**Note:** To use the CDS API, one must save a "dot-file" with their API key on it after making and logging into their account. Specific instructions are available [here](https://cds.climate.copernicus.eu/api-how-to). One can ignore the instructions about installing `cdsapi` as that is included in this library's `environment.yml` file.
+
 Single levels (hourly) datasets - [info](https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview)
 * reanalysis-era5-single-levels
 * reanalysis-era5-single-levels-preliminary-back-extension
