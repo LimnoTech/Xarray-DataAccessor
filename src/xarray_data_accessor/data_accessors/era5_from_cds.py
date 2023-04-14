@@ -77,13 +77,13 @@ class CDSDataAccessor(DataAccessorBase):
         cores = multiprocessing.cpu_count()
         if cores > 10:
             cores = 10
-        self.thread_limit = cores
+        self.thread_limit: int = cores
 
         # set up CDS client
-        self._client = None
+        self._client: cdsapi.Client = None
 
         # store the last dataset name grabbed for caching
-        self.dataset_name = None
+        self.dataset_name: str = None
 
     @classmethod
     def supported_datasets(cls) -> List[str]:

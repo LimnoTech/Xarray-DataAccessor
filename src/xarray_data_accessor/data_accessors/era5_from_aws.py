@@ -83,12 +83,8 @@ class AWSDataAccessor(DataAccessorBase):
 
     def __init__(self) -> None:
 
-        # get cores and settings for multiprocessing
-        self.thread_limit = multiprocessing.cpu_count
-        self.use_dask = True
-
         # store last accessed dataset name
-        self.dataset_name = None
+        self.dataset_name: str = None
 
     @classmethod
     def supported_datasets(cls) -> List[str]:
