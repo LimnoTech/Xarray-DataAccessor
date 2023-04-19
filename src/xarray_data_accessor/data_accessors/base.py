@@ -8,7 +8,7 @@ from typing import (
 from numbers import Number
 from datetime import datetime
 from xarray import Dataset
-#from xarray_data_accessor.shared_types import BoundingBoxDict
+# from xarray_data_accessor.shared_types import BoundingBoxDict
 
 
 class AttrsDict(TypedDict):
@@ -54,10 +54,9 @@ class DataAccessorBase(abc.ABC):
         self,
         dataset: str,
         variables: List[str],
+        bbox: dict,  # BoundingBoxDict,
         start_dt: datetime,
         end_dt: datetime,
-        bbox: dict,  # BoundingBoxDict,
-        timezone: str,
         **kwargs,
     ) -> Dataset:
         """Gathers the desired variables for ones time/space AOI.
@@ -65,10 +64,9 @@ class DataAccessorBase(abc.ABC):
         Arguments:
             :param dataset: Dataset to access.
             :param variables: List of variables to access.
+            :param bbox: Dictionary with bounding box EPSG 4326 lat/longs.
             :param start_dt: Datetime to start at (inclusive),
             :param end_dt: Datetime to stop at (exclusive).
-            :param bbox: Dictionary with bounding box EPSG 4326 lat/longs.
-            :param timezone: String specifying the desired timezone (see pytz docs).
 
         Returns:
             :return: xarray Dataset with the desired variables.
