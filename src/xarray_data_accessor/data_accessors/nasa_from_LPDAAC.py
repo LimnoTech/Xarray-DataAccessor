@@ -89,22 +89,22 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
         # TODO: update for NASA
-        raise NotImplementedError
+
         # write attrs storing top level data source info
-        attrs['dataset_name'] = self.dataset_name
-        attrs['institution'] = self.institution
+        # attrs['dataset_name'] = self.dataset_name
+        # attrs['institution'] = self.institution
 
         # write attrs storing projection info
-        attrs['x_dim'] = 'longitude'
-        attrs['y_dim'] = 'latitude'
-        attrs['EPSG'] = 4326
+        # attrs['x_dim'] = 'longitude'
+        # attrs['y_dim'] = 'latitude'
+        # attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
-        if 'monthly' in self.dataset_name:
-            attrs['time_step'] = 'monthly'
-        else:
-            attrs['time_step'] = 'hourly'
-        attrs['time_zone'] = 'UTC'
+        # if 'monthly' in self.dataset_name:
+        #    attrs['time_step'] = 'monthly'
+        # else:
+        #    attrs['time_step'] = 'hourly'
+        # attrs['time_zone'] = 'UTC'
         return attrs
 
     def _parse_kwargs(
@@ -154,11 +154,12 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         self._parse_kwargs(kwargs)
 
         # search for granules
-        granules = self._search_granules(
+        granules = self._find_matching_granules(
             dataset_name,
             start_dt,
             end_dt,
             bbox,
+            variables,
         )
 
         # TODO: make this stuff work!
@@ -168,7 +169,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         # if there is only one granule, just download it
         elif len(granules) == 1:
-            xarray_dataset = self.get_granule_functions[self.dataset_name](
+            xarray_dataset = self._get_granule_functions[self.dataset_name](
                 granules[0],
             )
 
@@ -182,7 +183,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
                 close_existing_client=False,
             )
             futures = client.map(
-                self.get_granule_functions[self.dataset_name],
+                self._get_granule_functions[self.dataset_name],
                 granules,
             )
 
@@ -204,7 +205,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
     # CDS API specific methods #################################################
     @property
-    def request_session(self) -> requests.Session:
+    def _request_session(self) -> requests.Session:
         """Returns a requests session and authentication tuple"""
         if self._session is None:
             self._session = requests.Session()
@@ -213,20 +214,24 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             self._session.auth = self.auth_tuple
         return self._session
 
-    @property
-    def link_identifier(self) -> Dict[str, str]:
+    def _get_link_identifier(
+        self,
+        variable: Optional[str] = None,
+    ) -> Dict[str, str]:
         """Returns a dictionary of link identifiers for each dataset
 
         This is used to parse CRM Search JSON responses.
         """
+        if variable is None:
+            variable = ''
         return {
             'NASADEM_NC': '.nc',
             'NASADEM_SC': '.zip',
-            'GLanCE30': 'LC.tif',
+            'GLanCE30': f'{variable}.tif',
         }
 
     @property
-    def get_granule_functions(self) -> Dict[str, Callable[[GranuleDict], xr.Dataset]]:
+    def _get_granule_functions(self) -> Dict[str, Callable[[GranuleDict], xr.Dataset]]:
         """Returns a dictionary of functions to open data for each dataset"""
         return {
             'NASADEM_NC': self._get_netcdf_granule,
@@ -256,7 +261,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         # find the correct granule link using the link identifier
         for link in entry_dict['links']:
-            if self.link_identifier[self.dataset_name] in link['title']:
+            if self._get_link_identifier[self.dataset_name] in link['title']:
                 granule_dict['granule_url'] = link['href']
                 break
 
@@ -285,6 +290,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         bbox: BoundingBoxDict,
         start_dt: Optional[datetime] = None,
         end_dt: Optional[datetime] = None,
+        variables: Optional[List[str]] = None,
     ) -> List[GranuleDict]:
         """Uses CRM Search API to find all granules matching the given parameters.
 
@@ -327,8 +333,8 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     ) -> requests.Response:
         """Gets a response for a single granule from the NASA Data Pool."""
         # send auth then data request
-        response1 = self.request_session.get(granule_dict['granule_url'])
-        response2 = self.request_session.get(
+        response1 = self._request_session.get(granule_dict['granule_url'])
+        response2 = self._request_session.get(
             response1.url,
             auth=self._auth_tuple,
         )

@@ -23,10 +23,7 @@ class AttrsDict(TypedDict):
 class DataAccessorBase(abc.ABC):
 
     @abc.abstractmethod
-    def __init__(
-        self,
-        **kwargs,
-    ) -> None:
+    def __init__(self) -> None:
         raise NotImplementedError
 
     @abc.abstractclassmethod
