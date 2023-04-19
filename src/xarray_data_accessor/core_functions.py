@@ -58,7 +58,9 @@ def get_xarray_dataset(
             NOTE: use DataAccessorFactory.supported_variables() for a mapping
             of data accessor + dataset names to supported variables.
         :param start_time: Time/date to start at (inclusive).
+            NOTE: Must be included even if dataset has no time dimension.
         :param end_time: Time/date to stop at (exclusive).
+            NOTE: Must be included even if dataset has no time dimension.
         :param start_end_timezone: The timezone for start/end time (default is UTC).
             NOTE: See list of possible timezones at the link below
             https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568
@@ -121,9 +123,9 @@ def get_xarray_dataset(
     xarray_dataset = data_accessor.get_data(
         dataset_name=dataset_name,
         variables=variables,
+        bbox=bounding_box,
         start_dt=start_dt,
         end_dt=end_dt,
-        bbox=bounding_box,
         kwargs=kwargs,
     )
 
