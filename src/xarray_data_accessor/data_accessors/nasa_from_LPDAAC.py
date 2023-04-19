@@ -35,6 +35,10 @@ from xarray_data_accessor.data_accessors.base import (
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
+from xarray_data_accessor.data_accessors.nasa_info import (
+    LPDAAC_VARIABLES,
+    LPDAAC_TIME_DIMS,
+)
 
 
 class NASAKwargsDict(TypedDict):
@@ -73,22 +77,12 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     @classmethod
     def supported_datasets(cls) -> List[str]:
         """Returns all datasets that can be accessed."""""
-        # TODO: start with elevation products
-        # datsets to check out below:
-        # https://lpdaac.usgs.gov/products/eco3etptjplv001/
-        # https://lpdaac.usgs.gov/products/glchmtv001/
-        return [
-            'NASADEM_NC',  # netcdf w/ single product
-            'NASADEM_SC',  # RAW w/ multiple sub products
-            'GLanCE30',  # geotiff with multiple sub products
-        ]
+        return list(LPDAAC_VARIABLES.keys())
 
     @classmethod
     def dataset_variables(cls) -> Dict[str, List[str]]:
         """Returns all variables for each dataset that can be accessed."""
-        out_dict = {}
-        # TODO: get this working for NASA
-        return out_dict
+        return LPDAAC_VARIABLES
 
     @property
     def attrs_dict(self) -> AttrsDict:
@@ -147,9 +141,9 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         self,
         dataset_name: str,
         variables: Union[str, List[str]],
+        bbox: BoundingBoxDict,
         start_dt: datetime,
         end_dt: datetime,
-        bbox: BoundingBoxDict,
         **kwargs,
     ) -> xr.Dataset:
 
