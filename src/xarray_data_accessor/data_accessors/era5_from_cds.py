@@ -192,9 +192,9 @@ class CDSDataAccessor(DataAccessorBase):
         self,
         dataset_name: str,
         variables: Union[str, List[str]],
+        bbox: BoundingBoxDict,
         start_dt: datetime,
         end_dt: datetime,
-        bbox: BoundingBoxDict,
         **kwargs,
     ) -> xr.Dataset:
         """
