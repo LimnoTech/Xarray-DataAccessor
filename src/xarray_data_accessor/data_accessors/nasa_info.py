@@ -44,7 +44,7 @@ LPDAAC_VARIABLES = {
 
 # keeps track of which datasets have time dimensions
 LPDAAC_TIME_DIMS = {
-    'NASADEM_NC': False,
-    'NASADEM_SC': False,
-    'GLanCE30': True,
+    'NASADEM_NC': None,
+    'NASADEM_SC': None,
+    'GLanCE30': 'yearly',
 }
