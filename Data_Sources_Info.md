@@ -50,3 +50,22 @@ While reading data from AWS can be much faster than the CDS API (especially for 
 We recommend using `AWSDataAccessor` for data visualization and xarray native workflows. However, if you want to sample the data and convert into a pandas data frame (i.e., via `xarray_data_accessor.get_data_tables()`), using `CDSDataAccessor` will be significantly faster.
 
 Another relevant difference is that AWS ERA5 data is returned along a uniform 0.25 decimal degree grid (i.e., 0.25, 0.5, 0.75,...) while CDS returns a grid with 0.25 increments as well, but centered based on the bounding box.
+
+## NASA DataAccessors
+**Note:** For all NASA DataAccessors one must have an active [EarthData Account]( https://urs.earthdata.nasa.gov/users/new), and pass in your username/password via the following `get_xarray_dataset()` keyword argument `authorization={'username': 'example_username', 'password': 'example_password'}`.
+
+
+### NASA/USGS LP DAAC DataPool - `NASA_LPDAAC_Accessor`
+[Organization information](https://lpdaac.usgs.gov/about/).
+
+NASADEM_NC - [info](https://lpdaac.usgs.gov/products/nasadem_hgtv001/)
+* This dataset provides a global 30m Digital Elevation Model derived from the Shuttle Radar Topography Mission (SRTM). Access to the QA/QC layers documented in the attached link ("NUM" and "SWB") are not currently supported, the only associated variable is "DEM" providing elevation relative to sea level in meters.
+
+NASADEM_SC - [info](https://lpdaac.usgs.gov/products/nasadem_scv001/)
+* This dataset provides DEM by-products. See the "Layers" section of the dataset documentation for details.
+
+**Note:** Both of the NASADEM datasets have no time dimension. However, one must still provide a start_time/end_time argument to `get_xarray_dataset()`. The time provided will not effect the data pulled.
+
+GLanCE30 - [info](https://lpdaac.usgs.gov/products/glance30v001/)
+* This dataset provides a (mostly) global 7 class Land Cover (LC) grid at 30m / yearly resolution. Note that there are areas without coverage. The "LC" variable provides the main grid, however other documented variables can be accessed that track land cover class changes over time.
+
