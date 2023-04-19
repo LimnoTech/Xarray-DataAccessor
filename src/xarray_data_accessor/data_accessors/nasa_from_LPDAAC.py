@@ -4,10 +4,9 @@ import requests
 import io
 import multiprocessing
 import xarray as xr
-import pandas as pd
-from pathlib import Path
+import numpy as np
 from datetime import datetime, timedelta
-from urllib.request import urlopen
+import pyproj
 from typing import (
     Tuple,
     Dict,
@@ -21,9 +20,6 @@ from typing import (
 from numbers import Number
 from xarray_data_accessor.multi_threading import (
     get_multithread,
-)
-from xarray_data_accessor.data_accessors.shared_functions import (
-    combine_variables,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -43,7 +39,9 @@ from xarray_data_accessor.data_accessors.nasa_info import (
 
 class NASAKwargsDict(TypedDict):
     """TypedDict for NASA data accessor kwargs"""
-    pass
+    authorization: Dict[str, str]
+    use_dask: Optional[bool]
+    thread_limit: Optional[int]
 
 
 class GranuleDict(TypedDict):
@@ -88,23 +86,18 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     def attrs_dict(self) -> AttrsDict:
         """Used to write aligned attributes to all datasets before merging"""
         attrs = {}
-        # TODO: update for NASA
 
         # write attrs storing top level data source info
-        # attrs['dataset_name'] = self.dataset_name
-        # attrs['institution'] = self.institution
+        attrs['dataset_name'] = self.dataset_name
+        attrs['institution'] = self.institution
 
         # write attrs storing projection info
-        # attrs['x_dim'] = 'longitude'
-        # attrs['y_dim'] = 'latitude'
-        # attrs['EPSG'] = 4326
+        attrs['x_dim'] = 'lon'
+        attrs['y_dim'] = 'lat'
+        attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
-        # if 'monthly' in self.dataset_name:
-        #    attrs['time_step'] = 'monthly'
-        # else:
-        #    attrs['time_step'] = 'hourly'
-        # attrs['time_zone'] = 'UTC'
+        attrs['time_step'] = LPDAAC_TIME_DIMS[self.dataset_name]
         return attrs
 
     def _parse_kwargs(
@@ -112,7 +105,25 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         kwargs_dict: NASAKwargsDict,
     ) -> None:
         """Parses kwargs for NASA data accessor"""
-        # TODO: start by making sure username and password are set
+        # make sure authentication credentials are set!
+        credential_error = ValueError(
+            'NASA data accessors require EarthData login credentials. '
+            'Please provide them as the argument "authorization" using '
+            'a dictionary with keys: "username" and "password".'
+        )
+        if 'authorization' not in kwargs_dict.keys():
+            raise credential_error
+        elif not isinstance(kwargs_dict['authorization'], dict):
+            raise credential_error
+        elif 'username' not in kwargs_dict['authorization'].keys():
+            raise credential_error
+        elif 'password' not in kwargs_dict['authorization'].keys():
+            raise credential_error
+        else:
+            self._username = kwargs_dict['authorization']['username']
+            self._password = kwargs_dict['authorization']['password']
+
+        # parse other kwargs
         if 'use_dask' in kwargs_dict.keys():
             use_dask = kwargs_dict['use_dask']
             if isinstance(use_dask, bool):
@@ -155,11 +166,11 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         # search for granules
         granules = self._find_matching_granules(
-            dataset_name,
-            start_dt,
-            end_dt,
-            bbox,
-            variables,
+            dataset_name=dataset_name,
+            bbox=bbox,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            variables=variables,
         )
 
         # TODO: make this stuff work!
@@ -179,18 +190,25 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
                 use_dask=self.use_dask,
                 n_workers=self.thread_limit,
                 threads_per_worker=1,
-                processes=True,
+                processes=False,
                 close_existing_client=False,
             )
-            futures = client.map(
-                self._get_granule_functions[self.dataset_name],
-                granules,
-            )
 
-            # wait for all futures to complete
-            data = []
-            for future in as_completed_func(futures):
-                data.append(future.result())
+            with client as executor:
+                futures = {
+                    executor.submit(
+                        self._get_granule_functions[self.dataset_name],
+                        granule,
+                    ): granule for granule in granules
+                }
+                data = []
+                for future in as_completed_func(futures):
+                    try:
+                        data.append(future.result())
+                    except Exception as e:
+                        logging.warning(
+                            f'Exception hit!: {e}'
+                        )
 
             # close client
             client.close()
@@ -201,7 +219,23 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         # add attributes
         xarray_dataset.attrs = self.attrs_dict
 
-        raise NotImplementedError
+        # write CRS (different datasets may come in different projections)
+        # TODO: this could be shared!
+        if 'crs' in xarray_dataset.data_vars:
+            epsg_code = pyproj.CRS.from_wkt(
+                xarray_dataset.crs.spatial_ref,
+            ).to_epsg()
+            if epsg_code != 4326:
+                xarray_dataset.attrs['EPSG'] = epsg_code
+        else:
+            epsg_code = 4326
+        xarray_dataset = xarray_dataset.rio.write_crs(epsg_code)
+        xarray_dataset = self._crop_data(
+            ds=xarray_dataset,
+            bbox=bbox,
+        )
+
+        return xarray_dataset
 
     # CDS API specific methods #################################################
     @property
@@ -211,23 +245,19 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             self._session = requests.Session()
             if self._auth_tuple is None:
                 self._auth_tuple = (self._username, self._password)
-            self._session.auth = self.auth_tuple
+            self._session.auth = self._auth_tuple
         return self._session
 
-    def _get_link_identifier(
-        self,
-        variable: Optional[str] = None,
-    ) -> Dict[str, str]:
+    @property
+    def _get_link_identifier(self) -> Dict[str, str]:
         """Returns a dictionary of link identifiers for each dataset
 
         This is used to parse CRM Search JSON responses.
         """
-        if variable is None:
-            variable = ''
         return {
             'NASADEM_NC': '.nc',
             'NASADEM_SC': '.zip',
-            'GLanCE30': f'{variable}.tif',
+            'GLanCE30': '.tif',
         }
 
     @property
@@ -267,23 +297,25 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         granule_dict['dataset_id'] = entry_dict['dataset_id']
         granule_dict['data_center'] = entry_dict['data_center']
+
+        # TODO: make sure this works for all datasets
+        bbox = [float(i) for i in entry_dict['boxes'][0].split(' ')]
         granule_dict['bbox'] = {
-            'west': entry_dict['bounding_box'][0],
-            'south': entry_dict['bounding_box'][1],
-            'east': entry_dict['bounding_box'][2],
-            'north': entry_dict['bounding_box'][3],
+            'west': bbox[1],
+            'south': bbox[0],
+            'east': bbox[3],
+            'north': bbox[2],
         }
         granule_dict['start_date'] = datetime.strptime(
             entry_dict['time_start'],
-            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%dT%H:%M:%S.%fZ',
         )
         granule_dict['end_date'] = datetime.strptime(
             entry_dict['time_end'],
-            '%Y-%m-%dT%H:%M:%SZ',
+            '%Y-%m-%dT%H:%M:%S.%fZ',
         )
         return granule_dict
 
-    @staticmethod
     def _find_matching_granules(
         self,
         dataset_name: str,
@@ -306,11 +338,17 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         # get bbox query url string
         bbox_str = f'&bounding_box[]={bbox["west"]},{bbox["south"]},{bbox["east"]},{bbox["north"]}'
 
-        # get temporal query url string
-        start_dt_str = self._format_datetime_string(start_dt)
-        end_dt_str = self._format_datetime_string(end_dt)
+        # get temporal query url string (for datasets that need it)
+        if LPDAAC_TIME_DIMS[dataset_name]:
+            start_dt_str = self._format_datetime_string(start_dt)
+            end_dt_str = self._format_datetime_string(end_dt)
+        else:
+            start_dt_str = ''
+            end_dt_str = ''
+
         if start_dt_str != '' or end_dt_str != '':
-            temporal_str = f'&temporal\[\]={start_dt_str},{end_dt_str}&[temporal][exclude_boundary]=true'
+            # &options[temporal][exclude_boundary]=true' -> this causes issues with non-time dependent datasets
+            temporal_str = f'&temporal={start_dt_str},{end_dt_str}'
         else:
             temporal_str = ''
 
@@ -384,3 +422,29 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     def _concat_granules() -> xr.Dataset:
         """Concatenates all granules into a single dataset."""
         raise NotImplementedError
+
+    @staticmethod
+    def _crop_data(
+        ds: xr.Dataset,
+        bbox: BoundingBoxDict,
+    ) -> xr.Dataset:
+        """Crops AWS ERA5 to the nearest 0.25 resolution"""
+        # make sure we have inclusive bounds at 0.25
+        x_bounds = np.array([bbox['west'], bbox['east']])
+        y_bounds = np.array([bbox['south'], bbox['north']])
+
+        # find closest x, y values in the data
+        nearest_x_idxs = np.abs(
+            ds.lon.values - x_bounds.reshape(-1, 1)
+        ).argmin(axis=1)
+        nearest_y_idxs = np.abs(
+            ds.lat.values - y_bounds.reshape(-1, 1)
+        ).argmin(axis=1)
+
+        # return the sliced dataset
+        return ds.isel(
+            {
+                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max() + 1),
+                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max() + 1),
+            }
+        ).copy()
