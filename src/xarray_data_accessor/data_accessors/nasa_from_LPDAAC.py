@@ -105,6 +105,10 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         kwargs_dict: NASAKwargsDict,
     ) -> None:
         """Parses kwargs for NASA data accessor"""
+        # if kwargs are buried, dig them out
+        while 'kwargs' in kwargs_dict.keys():
+            kwargs_dict = kwargs_dict['kwargs']
+
         # make sure authentication credentials are set!
         credential_error = ValueError(
             'NASA data accessors require EarthData login credentials. '
