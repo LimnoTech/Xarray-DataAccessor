@@ -4,9 +4,48 @@ import rioxarray
 import xarray as xr
 from typing import (
     Dict,
+    TypedDict,
     Union,
+    Any,
 )
 from numbers import Number
+from xarray_data_accessor.data_accessors.base import DataAccessorBase
+
+
+def apply_kwargs(
+    accessor_object: DataAccessorBase,
+    accessor_kwargs_dict: TypedDict,
+    kwargs_dict: Dict[str, Any],
+) -> None:
+    """Updates the accessor object by parsing kwargs.
+
+    Arguments:
+        accessor_object: The accessor object (self).
+        accessor_kwargs_dict: A TypedDict storing usable kwargs and types.
+        kwargs_dict: The kwargs passed via get_xarray_data().
+
+    Returns:
+        None - this should be used to updated the accessor object.
+    """
+    # if kwargs are buried, dig them out
+    while 'kwargs' in kwargs_dict.keys():
+        kwargs_dict = kwargs_dict['kwargs']
+
+    # get the TypedDict as a normal dict
+    accessor_kwargs_dict = accessor_kwargs_dict.__annotations__
+
+    # apply all kwargs that are in the TypedDict and match the type
+    for key, value in kwargs_dict.item():
+        if key not in accessor_kwargs_dict.keys():
+            warnings.warn(
+                f'Kwarg: {key} is allowed valid for {accessor_object.__name__}.'
+            )
+        elif not isinstance(value, accessor_kwargs_dict[key]):
+            warnings.warn(
+                f'Kwarg: {key} should be of type {accessor_kwargs_dict[key]}.'
+            )
+        else:
+            setattr(accessor_object, key, value)
 
 
 def combine_variables(

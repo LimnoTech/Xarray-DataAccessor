@@ -22,6 +22,7 @@ from xarray_data_accessor.multi_threading import (
 )
 from xarray_data_accessor.data_accessors.shared_functions import (
     combine_variables,
+    apply_kwargs,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -44,10 +45,10 @@ from xarray_data_accessor.data_accessors.era5_from_cds_info import (
 
 class CDSKwargsDict(TypedDict):
     """kwargs for CDSDataAccessor get_data() method."""
-    use_dask: Optional[bool]
-    thread_limit: Optional[int]
-    file_format: Optional[str]
-    specific_hours: Optional[List[int]]
+    use_dask: bool
+    thread_limit: int
+    file_format: str
+    specific_hours: List[int]
 
 
 class CDSInputDict(TypedDict):
@@ -73,17 +74,20 @@ class CDSDataAccessor(DataAccessorBase):
 
     def __init__(self) -> None:
 
-        # set of multiprocessing threads, CDS enforces a concurrency limit
-        cores = multiprocessing.cpu_count()
-        if cores > 10:
-            cores = 10
-        self.thread_limit: int = cores
-
         # set up CDS client
         self._client: cdsapi.Client = None
 
         # store the last dataset name grabbed for caching
         self.dataset_name: str = None
+
+        # set default kwargs
+        cores = multiprocessing.cpu_count() - 1
+        if cores > 10:
+            cores = 10
+        self.thread_limit: int = cores
+        self.use_dask: bool = True
+        self.file_format: str = 'netcdf'
+        self.specific_hours: List[int] = None
 
     @classmethod
     def supported_datasets(cls) -> List[str]:
@@ -138,55 +142,12 @@ class CDSDataAccessor(DataAccessorBase):
     ) -> None:
         """Parses kwargs for CDS data accessors"""
 
-        if 'use_dask' in kwargs_dict.keys():
-            use_dask = kwargs_dict['use_dask']
-            if isinstance(use_dask, bool):
-                self.use_dask = use_dask
-            else:
-                warnings.warn(
-                    'kwarg:use_dask must be a boolean. '
-                    'Defaulting to True.'
-                )
-        else:
-            self.use_dask = True
-
-        if 'thread_limit' in kwargs_dict.keys():
-            thread_limit = kwargs_dict['thread_limit']
-            if isinstance(thread_limit, int):
-                self.thread_limit = thread_limit
-            else:
-                warnings.warn(
-                    'kwarg:thread_limit must be an integer. '
-                    'Defaulting to number of cores.'
-                )
-        else:
-            self.thread_limit = multiprocessing.cpu_count()
-
-        if 'file_format' in kwargs_dict.keys():
-            file_format = self._verify_file_format(
-                kwargs_dict['file_format'],
-            )
-            if file_format in self.file_format_dict.keys():
-                self.file_format = file_format
-            else:
-                warnings.warn(
-                    f'kwarg:file_format must be one of the following: '
-                    f'{self.file_format_dict.keys()}.'
-                )
-        else:
-            self.file_format = 'netcdf'
-
-        if 'specific_hours' in kwargs_dict.keys():
-            specific_hours = kwargs_dict['specific_hours']
-            if isinstance(specific_hours, list):
-                self.specific_hours = specific_hours
-            else:
-                warnings.warn(
-                    'kwarg:specific_hours must be a list of integers. '
-                    'Defaulting to None.'
-                )
-        else:
-            self.specific_hours = None
+        # apply the kwargs
+        apply_kwargs(
+            accessor_object=self,
+            accessor_kwargs_dict=CDSKwargsDict,
+            kwargs_dict=kwargs_dict,
+        )
 
     def get_data(
         self,

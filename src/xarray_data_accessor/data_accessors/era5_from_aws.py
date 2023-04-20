@@ -22,6 +22,7 @@ from xarray_data_accessor.multi_threading import (
 )
 from xarray_data_accessor.data_accessors.shared_functions import (
     combine_variables,
+    apply_kwargs,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -58,8 +59,8 @@ CDS_TO_AWS_NAMES_CROSSWALK = {
 
 class AWSKwargsDict(TypedDict):
     """kwargs for AWSDataAccessor get_data() method."""
-    use_dask: Optional[bool]
-    thread_limit: Optional[int]
+    use_dask: bool
+    thread_limit: int
 
 
 class AWSRequestDict(TypedDict):
@@ -85,6 +86,10 @@ class AWSDataAccessor(DataAccessorBase):
 
         # store last accessed dataset name
         self.dataset_name: str = None
+
+        # set default kwargs
+        self.thread_limit: int = multiprocessing.cpu_count() - 1
+        self.use_dask: bool = True
 
     @classmethod
     def supported_datasets(cls) -> List[str]:
@@ -143,29 +148,12 @@ class AWSDataAccessor(DataAccessorBase):
     ) -> None:
         """Parses kwargs and sets class attributes"""
 
-        if 'use_dask' in kwargs_dict.keys():
-            use_dask = kwargs_dict['use_dask']
-            if isinstance(use_dask, bool):
-                self.use_dask = use_dask
-            else:
-                warnings.warn(
-                    'kwarg:use_dask must be a boolean. '
-                    'Defaulting to True.'
-                )
-        else:
-            self.use_dask = True
-
-        if 'thread_limit' in kwargs_dict.keys():
-            thread_limit = kwargs_dict['thread_limit']
-            if isinstance(thread_limit, int):
-                self.thread_limit = thread_limit
-            else:
-                warnings.warn(
-                    'kwarg:thread_limit must be an integer. '
-                    'Defaulting to number of cores.'
-                )
-        else:
-            self.thread_limit = multiprocessing.cpu_count()
+        # apply the kwargs
+        apply_kwargs(
+            accessor_object=self,
+            accessor_kwargs_dict=AWSKwargsDict,
+            kwargs_dict=kwargs_dict,
+        )
 
     def get_data(
         self,

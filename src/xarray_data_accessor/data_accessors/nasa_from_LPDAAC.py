@@ -28,6 +28,9 @@ from xarray_data_accessor.data_accessors.base import (
     DataAccessorBase,
     AttrsDict,
 )
+from xarray_data_accessor.data_accessors.shared_functions import (
+    apply_kwargs,
+)
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
@@ -40,8 +43,8 @@ from xarray_data_accessor.data_accessors.nasa_info import (
 class NASAKwargsDict(TypedDict):
     """TypedDict for NASA data accessor kwargs"""
     authorization: Dict[str, str]
-    use_dask: Optional[bool]
-    thread_limit: Optional[int]
+    use_dask: bool
+    thread_limit: int
 
 
 class GranuleDict(TypedDict):
@@ -71,6 +74,10 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         # store the last dataset name grabbed for caching
         self.dataset_name: str = None
+
+        # set kwarg defaults
+        self.use_dask = True
+        self.thread_limit = multiprocessing.cpu_count() - 1
 
     @classmethod
     def supported_datasets(cls) -> List[str]:
@@ -124,33 +131,17 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         elif 'password' not in kwargs_dict['authorization'].keys():
             raise credential_error
         else:
-            self._username = kwargs_dict['authorization']['username']
-            self._password = kwargs_dict['authorization']['password']
+            # pop out authorization credentials and apply them
+            authorization = kwargs_dict.pop('authorization')
+            self._username = authorization['username']
+            self._password = authorization['password']
 
-        # parse other kwargs
-        if 'use_dask' in kwargs_dict.keys():
-            use_dask = kwargs_dict['use_dask']
-            if isinstance(use_dask, bool):
-                self.use_dask = use_dask
-            else:
-                warnings.warn(
-                    'kwarg:use_dask must be a boolean. '
-                    'Defaulting to True.'
-                )
-        else:
-            self.use_dask = True
-
-        if 'thread_limit' in kwargs_dict.keys():
-            thread_limit = kwargs_dict['thread_limit']
-            if isinstance(thread_limit, int):
-                self.thread_limit = thread_limit
-            else:
-                warnings.warn(
-                    'kwarg:thread_limit must be an integer. '
-                    'Defaulting to number of cores.'
-                )
-        else:
-            self.thread_limit = multiprocessing.cpu_count()
+        # apply the kwargs
+        apply_kwargs(
+            accessor_object=self,
+            accessor_kwargs_dict=NASAKwargsDict,
+            kwargs_dict=kwargs_dict,
+        )
 
     def get_data(
         self,
