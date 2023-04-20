@@ -179,7 +179,7 @@ class AWSDataAccessor(DataAccessorBase):
             self.dataset_name = dataset_name
 
         # parse kwargs
-        self._parse_kwargs(kwargs['kwargs'])
+        self._parse_kwargs(kwargs)
 
         # make a dictionary to store all data
         all_data_dict = {}

@@ -174,7 +174,7 @@ class CDSDataAccessor(DataAccessorBase):
             self.dataset_name = dataset_name
 
         # parse kwargs
-        self._parse_kwargs(kwargs['kwargs'])
+        self._parse_kwargs(kwargs)
 
         # make time dict w/ CDS API formatting
         time_dicts = self._get_time_dicts(

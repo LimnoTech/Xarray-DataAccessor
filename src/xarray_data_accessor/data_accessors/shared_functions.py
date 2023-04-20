@@ -35,7 +35,7 @@ def apply_kwargs(
     accessor_kwargs_dict = accessor_kwargs_dict.__annotations__
 
     # apply all kwargs that are in the TypedDict and match the type
-    for key, value in kwargs_dict.item():
+    for key, value in kwargs_dict.items():
         if key not in accessor_kwargs_dict.keys():
             warnings.warn(
                 f'Kwarg: {key} is allowed valid for {accessor_object.__name__}.'
