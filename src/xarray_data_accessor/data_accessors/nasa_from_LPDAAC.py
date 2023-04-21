@@ -501,7 +501,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         if 'band_data' in ds.data_vars:
             ds = ds.rename({'band_data': granule_dict['variable_name']})
         if 'band' in list(ds.coords) and 'band' not in ds.dims:
-            ds = ds.drop('band')
+            ds = ds.drop_vars('band')
         if 'time' not in ds.dims and LPDAAC_TIME_DIMS[granule_dict['dataset_name']]:
             ds = ds.expand_dims(
                 time=[

@@ -109,7 +109,7 @@ def write_crs(
         epsg_code = pyproj.CRS.from_wkt(
             ds.spatial_ref.spatial_ref,
         ).to_epsg()
-        ds = ds.drop('spatial_ref')
+        ds = ds.drop_vars('spatial_ref')
     elif known_epsg:
         epsg_code = known_epsg
     else:
