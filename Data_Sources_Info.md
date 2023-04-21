@@ -68,4 +68,5 @@ NASADEM_SC - [info](https://lpdaac.usgs.gov/products/nasadem_scv001/)
 
 GLanCE30 - [info](https://lpdaac.usgs.gov/products/glance30v001/)
 * This dataset provides a (mostly) global 7 class Land Cover (LC) grid at 30m / yearly resolution. Note that there are areas without coverage. The "LC" variable provides the main grid, however other documented variables can be accessed that track land cover class changes over time.
+* **Note:** All GLanCE30 data is collected on July 1st (7/1), therefore if your date range does not pass over July no data will be returned!
 
