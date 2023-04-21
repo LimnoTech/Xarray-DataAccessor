@@ -3,6 +3,7 @@ import warnings
 import requests
 import io
 import multiprocessing
+import rioxarray
 import xarray as xr
 import numpy as np
 from datetime import datetime, timedelta
@@ -30,6 +31,7 @@ from xarray_data_accessor.data_accessors.base import (
 from xarray_data_accessor.data_accessors.shared_functions import (
     apply_kwargs,
     write_crs,
+    convert_crs,
     crop_data,
 )
 from xarray_data_accessor.data_accessors.factory import (
@@ -38,6 +40,9 @@ from xarray_data_accessor.data_accessors.factory import (
 from xarray_data_accessor.data_accessors.nasa_info import (
     LPDAAC_VARIABLES,
     LPDAAC_TIME_DIMS,
+    LPDAAC_XY_DIMS,
+    LPDAAC_EPSG,
+    LPDAAC_WKT,
 )
 
 
@@ -106,12 +111,14 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         attrs['institution'] = self.institution
 
         # write attrs storing projection info
-        attrs['x_dim'] = 'lon'
-        attrs['y_dim'] = 'lat'
+        attrs['x_dim'] = LPDAAC_XY_DIMS[self.dataset_name][0]
+        attrs['y_dim'] = LPDAAC_XY_DIMS[self.dataset_name][1]
         attrs['EPSG'] = 4326
 
         # write attrs storing time dimension info
         attrs['time_step'] = LPDAAC_TIME_DIMS[self.dataset_name]
+        if attrs['time_step']:
+            attrs['time_dim'] = 'time'
         return attrs
 
     def _parse_kwargs(
@@ -167,15 +174,16 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         self._parse_kwargs(kwargs)
 
         # search for granules
-        granules = self._find_matching_granules(
-            dataset_name=dataset_name,
-            bbox=bbox,
-            start_dt=start_dt,
-            end_dt=end_dt,
-            variables=variables,
-        )
+        granules = []
+        for variable in variables:
+            granules += self._find_matching_granules(
+                dataset_name=dataset_name,
+                bbox=bbox,
+                variable=variable,
+                start_dt=start_dt,
+                end_dt=end_dt,
+            )
 
-        # TODO: make this stuff work!
         # download granules in parallel
         if len(granules) == 0:
             raise ValueError('No granules found for given search parameters.')
@@ -221,8 +229,19 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         # add attributes
         xarray_dataset.attrs = self.attrs_dict
 
-        # write CRS (different datasets may come in different projections)
-        xarray_dataset = write_crs(xarray_dataset)
+        # convert CRS to EPSG:4326 (different datasets may come in different projections)
+        xarray_dataset = convert_crs(
+            xarray_dataset,
+            known_epsg=LPDAAC_EPSG[self.dataset_name],
+            known_wkt=LPDAAC_WKT[self.dataset_name],
+            out_epsg=4326,
+        )
+
+        # write CRS
+        xarray_dataset = write_crs(
+            xarray_dataset,
+            known_epsg=4326,
+        )
 
         # crop data to bbox
         xarray_dataset = crop_data(
@@ -243,17 +262,21 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             self._session.auth = self._auth_tuple
         return self._session
 
-    @property
-    def _get_link_identifier(self) -> Dict[str, str]:
+    @staticmethod
+    def _get_link_identifier(
+        dataset_name: str,
+        variable: str,
+    ) -> Dict[str, str]:
         """Returns a dictionary of link identifiers for each dataset
 
         This is used to parse CRM Search JSON responses.
         """
-        return {
+        link_identifiers = {
             'NASADEM_NC': '.nc',
             'NASADEM_SC': '.zip',
-            'GLanCE30': '.tif',
+            'GLanCE30': f'{variable}.tif',
         }
+        return link_identifiers[dataset_name]
 
     @property
     def _get_granule_functions(self) -> Dict[str, Callable[[GranuleDict], xr.Dataset]]:
@@ -279,6 +302,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     def _get_granule_dict(
         self,
         entry_dict: Dict[str, Any],
+        variable: str,
     ) -> GranuleDict:
         """Parses granule metadata from CRM Search API response"""
         granule_dict = {}
@@ -286,21 +310,35 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
 
         # find the correct granule link using the link identifier
         for link in entry_dict['links']:
-            if self._get_link_identifier[self.dataset_name] in link['title']:
+            if self._get_link_identifier(self.dataset_name, variable) in link['title']:
                 granule_dict['granule_url'] = link['href']
                 break
 
+        granule_dict['dataset_name'] = self.dataset_name
+        granule_dict['variable_name'] = variable
         granule_dict['dataset_id'] = entry_dict['dataset_id']
         granule_dict['data_center'] = entry_dict['data_center']
 
-        # TODO: make sure this works for all datasets
-        bbox = [float(i) for i in entry_dict['boxes'][0].split(' ')]
-        granule_dict['bbox'] = {
-            'west': bbox[1],
-            'south': bbox[0],
-            'east': bbox[3],
-            'north': bbox[2],
-        }
+        # get bounding box is stored in the response
+        if 'boxes' in entry_dict.keys():
+            bbox = [float(i) for i in entry_dict['boxes'][0].split(' ')]
+
+        # get bounding box by parsing the polygon
+        elif 'polygons' in entry_dict.keys():
+            # coords a list of lat, lon, lat, lon,... values
+            coords = [float(i)
+                      for i in entry_dict['polygons'][0][0].split(' ')]
+            lats = coords[::2]
+            lons = coords[1::2]
+            bbox = [min(lats), min(lons), max(lats), max(lons)]
+
+        granule_dict['bbox'] = BoundingBoxDict(
+            west=bbox[1],
+            south=bbox[0],
+            east=bbox[3],
+            north=bbox[2],
+        )
+
         granule_dict['start_date'] = datetime.strptime(
             entry_dict['time_start'],
             '%Y-%m-%dT%H:%M:%S.%fZ',
@@ -311,13 +349,57 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         )
         return granule_dict
 
+    @staticmethod
+    def _dataset_specific_warnings(
+        granules_list: List[GranuleDict],
+        dataset_name: str,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> None:
+        """Warns the user of dataset specific problems with the search results."""
+        if dataset_name == 'GLanCE30':
+            # warn or raise exception if start_dt or end_dt are outside of valid years
+            valid_years = list(range(2001, 2020))
+            glance_years_warning = (
+                'GLanCE30 data is only available for the years 2001-2019! '
+            )
+            if start_dt.year not in valid_years and end_dt.year not in valid_years:
+                raise ValueError(
+                    glance_years_warning +
+                    f'Start date {start_dt} and end date {end_dt} are both invalid!'
+                )
+            elif start_dt.year not in valid_years:
+                warnings.warn(
+                    glance_years_warning +
+                    f'Start date {start_dt} is invalid! Some requested data will be missing.'
+                )
+            elif end_dt.year not in valid_years:
+                warnings.warn(
+                    glance_years_warning +
+                    f'End date {end_dt} is invalid! Some requested data will be missing.'
+                )
+
+            # warn if the user may have expected more years than returned
+            elif len(granules_list) < len(list(range(start_dt.year, end_dt.year + 1))):
+                warnings.warn(
+                    'GLaNCE30 data is collected in 1 year increments on JULY 1st! '
+                    'You may me expecting more data than returned because your '
+                    'range does not include all July 1st dates.'
+                )
+
+            if len(granules_list) == 0:
+                raise ValueError(
+                    'No data found for the given parameters! '
+                    'Note that GLanCE30 data is only available for NORTH AMERICA.'
+                )
+
     def _find_matching_granules(
         self,
         dataset_name: str,
         bbox: BoundingBoxDict,
+        variable: str,
         start_dt: Optional[datetime] = None,
         end_dt: Optional[datetime] = None,
-        variables: Optional[List[str]] = None,
     ) -> List[GranuleDict]:
         """Uses CRM Search API to find all granules matching the given parameters.
 
@@ -351,10 +433,22 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         search_url = crm_base_url + dataset_str + bbox_str + temporal_str
         response = requests.get(search_url)
 
-        # return list of granule endpoint urls
+        # parse response and return list of granule endpoint urls
         if response.ok:
             granule_links = dict(response.json())['feed']['entry']
-            return [self._get_granule_dict(granule) for granule in granule_links]
+            granules_list = [
+                self._get_granule_dict(g, variable) for g in granule_links
+            ]
+
+            # flag dataset specific warnings if necessary
+            self._dataset_specific_warnings(
+                granules_list,
+                dataset_name,
+                start_dt,
+                end_dt,
+            )
+
+            return granules_list
         else:
             raise ValueError(
                 f'Error retrieving searching granules! See response text: {response.text}'
@@ -397,7 +491,27 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         granule_dict: GranuleDict,
     ) -> xr.Dataset:
         """Retrieves a single GeoTIFF granule from the NASA Data Pool."""
-        raise NotImplementedError
+        response = self._request_granule(granule_dict)
+        ds = xr.open_dataset(
+            io.BytesIO(response.content),
+            engine='rasterio',
+        ).squeeze()
+
+        # rename things as necessary
+        if 'band_data' in ds.data_vars:
+            ds = ds.rename({'band_data': granule_dict['variable_name']})
+        if 'band' in list(ds.coords) and 'band' not in ds.dims:
+            ds = ds.drop('band')
+        if 'time' not in ds.dims and LPDAAC_TIME_DIMS[granule_dict['dataset_name']]:
+            ds = ds.expand_dims(
+                time=[
+                    getattr(
+                        granule_dict['end_date'],
+                        LPDAAC_TIME_DIMS[granule_dict['dataset_name']],
+                    ),
+                ],
+            )
+        return ds
 
     def _get_raw_granule(
         self,

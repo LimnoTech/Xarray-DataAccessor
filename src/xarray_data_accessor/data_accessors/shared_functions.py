@@ -14,6 +14,9 @@ from typing import (
     Optional,
 )
 from numbers import Number
+from xarray_data_accessor.utility_functions import (
+    _convert_bbox,
+)
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
 )
@@ -104,8 +107,9 @@ def write_crs(
     if 'spatial_ref' in ds.data_vars:
         # get the epsg code
         epsg_code = pyproj.CRS.from_wkt(
-            ds.spatial_ref.crs_wkt,
+            ds.spatial_ref.spatial_ref,
         ).to_epsg()
+        ds = ds.drop('spatial_ref')
     elif known_epsg:
         epsg_code = known_epsg
     else:
@@ -120,6 +124,36 @@ def write_crs(
 
     # write the crs and return the dataset
     ds = ds.rio.write_crs(epsg_code)
+    if 'crs' in ds.coords:
+        ds = ds.rename({'crs': 'spatial_ref'})
+    return ds
+
+
+def convert_crs(
+    ds: xr.Dataset,
+    known_epsg: Optional[int] = None,
+    known_wkt: Optional[str] = None,
+    out_epsg: Optional[int] = 4326,
+) -> xr.Dataset:
+    """Reprojects a dataset to new CRS (4326 by default)."""
+    # write the input crs
+    if known_epsg:
+        crs = known_epsg
+    elif known_wkt:
+        crs = known_wkt
+    else:
+        crs = ds.attrs['EPSG']
+
+    if not crs == out_epsg:
+        # convert using rioxarray
+        ds = ds.rio.write_crs(crs)
+        ds = ds.rio.reproject(
+            f'EPSG:{out_epsg}',
+        )
+
+        # update dim names because rioxarray changes them
+        ds.attrs['x_dim'] = 'x'
+        ds.attrs['y_dim'] = 'y'
     return ds
 
 
@@ -128,7 +162,14 @@ def crop_data(
     bbox: BoundingBoxDict,
     xy_dim_names: Optional[Tuple[str, str]] = None,
 ) -> xr.Dataset:
-    """Crops AWS ERA5 to the nearest 0.25 resolution"""
+    """Crops a dataset to the bounding box."""
+    # convert bbox to the dataset's CRS
+    if ds.attrs['EPSG'] != 4326:
+        bbox = _convert_bbox(
+            bbox=bbox,
+            known_epsg=ds.attrs['EPSG'],
+        )
+
     # get the x/y dim names
     if xy_dim_names:
         x_dim, y_dim = xy_dim_names

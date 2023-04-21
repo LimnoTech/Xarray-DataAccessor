@@ -33,18 +33,38 @@ LPDAAC_VARIABLES = {
     ],
     'GLanCE30': [
         'LC',
-        'ChgDate',
-        'PrevClass',
-        'EVI2med',
-        'EVIamp',
-        'EVI2rate',
-        'EVI2chg',
+        # ignoring others. Vastly complicates CRM search behavior.
+        # 'ChgDate',
+        # 'PrevClass',
+        # 'EVI2med',
+        # 'EVIamp',
+        # 'EVI2rate',
+        # 'EVI2chg',
     ],
 }
 
 # keeps track of which datasets have time dimensions
+# NOTE: if not None, these much match datetime object attribute conventions
 LPDAAC_TIME_DIMS = {
     'NASADEM_NC': None,
     'NASADEM_SC': None,
-    'GLanCE30': 'yearly',
+    'GLanCE30': 'year',
+}
+
+LPDAAC_XY_DIMS = {
+    'NASADEM_NC': ['lon', 'lat'],
+    # 'NASADEM_SC': ['lat', 'lon'],
+    'GLanCE30': ['x', 'y'],
+}
+
+# NOTE: GLanCE30 is in a projected CRS - https://measures-glance.github.io/glance-grids/params.html
+LPDAAC_EPSG = {
+    'NASADEM_NC': 4326,
+    'NASADEM_SC': 4326,
+    'GLanCE30': None
+}
+LPDAAC_WKT = {
+    'NASADEM_NC': None,
+    'NASADEM_SC': None,
+    'GLanCE30': 'PROJCS["BU MEaSUREs Lambert Azimuthal Equal Area - NA - V01",GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["false_easting",0.0],PARAMETER["false_northing",0.0],PARAMETER["longitude_of_center",-100],PARAMETER["latitude_of_center",50],UNIT["meter",1.0]]'
 }
