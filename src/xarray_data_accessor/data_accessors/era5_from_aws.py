@@ -23,6 +23,8 @@ from xarray_data_accessor.multi_threading import (
 from xarray_data_accessor.data_accessors.shared_functions import (
     combine_variables,
     apply_kwargs,
+    crop_data,
+    crop_time_dimension,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -226,7 +228,7 @@ class AWSDataAccessor(DataAccessorBase):
                     var = aws_response_dict['variable']
                     index = aws_response_dict['index']
                     ds = aws_response_dict['dataset']
-                    ds = self._crop_time_dimension(
+                    ds = crop_time_dimension(
                         ds,
                         start_dt,
                         end_dt,
@@ -291,32 +293,6 @@ class AWSDataAccessor(DataAccessorBase):
             rename_dict[time_dim] = 'time'
         return dataset.rename(rename_dict)
 
-    @staticmethod
-    def _crop_aws_data(
-        ds: xr.Dataset,
-        bbox: BoundingBoxDict,
-    ) -> xr.Dataset:
-        """Crops AWS ERA5 to the nearest 0.25 resolution"""
-        # make sure we have inclusive bounds at 0.25
-        x_bounds = np.array([bbox['west'], bbox['east']])
-        y_bounds = np.array([bbox['south'], bbox['north']])
-
-        # find closest x, y values in the data
-        nearest_x_idxs = np.abs(
-            ds.lon.values - x_bounds.reshape(-1, 1)
-        ).argmin(axis=1)
-        nearest_y_idxs = np.abs(
-            ds.lat.values - y_bounds.reshape(-1, 1)
-        ).argmin(axis=1)
-
-        # return the sliced dataset
-        return ds.isel(
-            {
-                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max() + 1),
-                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max() + 1),
-            }
-        ).copy()
-
     def _get_requests_dicts(
         self,
         variables: List[str],
@@ -379,9 +355,10 @@ class AWSDataAccessor(DataAccessorBase):
         # adjust to switch to standard lat/lon
         aws_request_dict['dataset']['lon'] = aws_request_dict['dataset']['lon'] - 180
 
-        aws_request_dict['dataset'] = self._crop_aws_data(
+        aws_request_dict['dataset'] = crop_data(
             aws_request_dict['dataset'],
             aws_request_dict['bbox'],
+            xy_dim_names=('lon', 'lat'),
         )
 
         # rename time dimension if necessary
@@ -390,14 +367,3 @@ class AWSDataAccessor(DataAccessorBase):
         )
 
         return aws_request_dict
-
-    @staticmethod
-    def _crop_time_dimension(
-        dataset: xr.Dataset,
-        start_dt: datetime,
-        end_dt: datetime,
-    ) -> xr.Dataset:
-        """Crops the time dimension to the start and end datetimes."""
-        return dataset.sel(
-            {'time': slice(start_dt, end_dt)},
-        ).copy(deep=True)

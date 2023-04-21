@@ -23,6 +23,7 @@ from xarray_data_accessor.multi_threading import (
 from xarray_data_accessor.data_accessors.shared_functions import (
     combine_variables,
     apply_kwargs,
+    crop_time_dimension,
 )
 from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
@@ -268,10 +269,10 @@ class CDSDataAccessor(DataAccessorBase):
                 )
 
                 # crop by time
-                ds = ds.sel(
-                    {
-                        'time': slice(start_dt, end_dt),
-                    },
+                ds = crop_time_dimension(
+                    ds,
+                    start_dt,
+                    end_dt,
                 )
 
                 all_data_dict[variable] = ds.rename(

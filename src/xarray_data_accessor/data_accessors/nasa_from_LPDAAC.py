@@ -6,7 +6,6 @@ import multiprocessing
 import xarray as xr
 import numpy as np
 from datetime import datetime, timedelta
-import pyproj
 from typing import (
     Tuple,
     Dict,
@@ -30,6 +29,8 @@ from xarray_data_accessor.data_accessors.base import (
 )
 from xarray_data_accessor.data_accessors.shared_functions import (
     apply_kwargs,
+    write_crs,
+    crop_data,
 )
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
@@ -221,17 +222,10 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         xarray_dataset.attrs = self.attrs_dict
 
         # write CRS (different datasets may come in different projections)
-        # TODO: this could be shared!
-        if 'crs' in xarray_dataset.data_vars:
-            epsg_code = pyproj.CRS.from_wkt(
-                xarray_dataset.crs.spatial_ref,
-            ).to_epsg()
-            if epsg_code != 4326:
-                xarray_dataset.attrs['EPSG'] = epsg_code
-        else:
-            epsg_code = 4326
-        xarray_dataset = xarray_dataset.rio.write_crs(epsg_code)
-        xarray_dataset = self._crop_data(
+        xarray_dataset = write_crs(xarray_dataset)
+
+        # crop data to bbox
+        xarray_dataset = crop_data(
             ds=xarray_dataset,
             bbox=bbox,
         )
@@ -423,29 +417,3 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
     def _concat_granules() -> xr.Dataset:
         """Concatenates all granules into a single dataset."""
         raise NotImplementedError
-
-    @staticmethod
-    def _crop_data(
-        ds: xr.Dataset,
-        bbox: BoundingBoxDict,
-    ) -> xr.Dataset:
-        """Crops AWS ERA5 to the nearest 0.25 resolution"""
-        # make sure we have inclusive bounds at 0.25
-        x_bounds = np.array([bbox['west'], bbox['east']])
-        y_bounds = np.array([bbox['south'], bbox['north']])
-
-        # find closest x, y values in the data
-        nearest_x_idxs = np.abs(
-            ds.lon.values - x_bounds.reshape(-1, 1)
-        ).argmin(axis=1)
-        nearest_y_idxs = np.abs(
-            ds.lat.values - y_bounds.reshape(-1, 1)
-        ).argmin(axis=1)
-
-        # return the sliced dataset
-        return ds.isel(
-            {
-                'lon': slice(nearest_x_idxs.min(), nearest_x_idxs.max() + 1),
-                'lat': slice(nearest_y_idxs.min(), nearest_y_idxs.max() + 1),
-            }
-        ).copy()
