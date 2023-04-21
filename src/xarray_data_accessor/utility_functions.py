@@ -3,6 +3,7 @@ import logging
 import warnings
 from datetime import datetime
 import pytz
+import pyproj
 from pytz.exceptions import UnknownTimeZoneError
 import xarray as xr
 import pandas as pd
@@ -215,6 +216,39 @@ def _coords_in_bbox(
     if len(list(set(conditionals))) == 1 and conditionals[0] is True:
         return True
     return False
+
+
+def _convert_bbox(
+    bbox: BoundingBoxDict,
+    known_epsg: int,
+) -> BoundingBoxDict:
+    """Converts bbox coordinates to a different EPSG."""
+
+    # EPSG:4326 bbox list
+    bbox_list_in = [
+        bbox['west'],
+        bbox['south'],
+        bbox['east'],
+        bbox['north'],
+    ]
+
+    # create a PyProj transformer object
+    transformer = pyproj.Transformer.from_crs(
+        src_crs=f'EPSG:4326',
+        target_crs=f'EPSG:{known_epsg}',
+        always_xy=True,
+    )
+
+    bbox_list_out = transformer.transform(
+        *bbox_list_in,
+    )
+
+    return BoundingBoxDict(
+        west=bbox_list_out[0],
+        east=bbox_list_out[2],
+        south=bbox_list_out[1],
+        north=bbox_list_out[3],
+    )
 
 
 def _verify_variables(
