@@ -360,6 +360,7 @@ class AWSDataAccessor(DataAccessorBase):
         # adjust to switch to standard lat/lon
         aws_request_dict['dataset']['lon'] = aws_request_dict['dataset']['lon'] - 180
 
+        aws_request_dict['dataset'].attrs['EPSG'] = 4326
         aws_request_dict['dataset'] = crop_data(
             aws_request_dict['dataset'],
             aws_request_dict['bbox'],
