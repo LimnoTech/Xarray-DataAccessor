@@ -17,11 +17,12 @@ def test_name_space():
     names = [
         'get_xarray_dataset',
         'get_bounding_box',
-        'convert_timezone',
         'spatial_resample',
         'get_data_tables',
+        'subset_time_by_timezone',
         'delete_temp_files',
     ]
+
     for name in names:
         if name in dir(xarray_data_accessor):
             count += 1
