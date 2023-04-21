@@ -61,7 +61,6 @@ def apply_kwargs(
 def combine_variables(
     dataset_dict: Dict[str, xr.Dataset],
     attrs_dict: Dict[str, Union[str, Number]],
-    epsg: int = 4326,
 ) -> xr.Dataset:
     """Combines all variables into a single dataset."""
     # remove and warn about NoneType responses
@@ -90,22 +89,25 @@ def combine_variables(
     logging.info('Combining all variable Datasets...')
     out_ds = xr.merge(
         list(dataset_dict.values()),
-    ).rio.write_crs(epsg)
+    )
     logging.info('Done! Returning combined dataset.')
     return out_ds
 
 
 def write_crs(
     ds: xr.Dataset,
+    known_epsg: Optional[int] = None,
 ) -> xr.Dataset:
     # convert spatial_ref naming convention to crs
-    if 'spatial_ref' in ds.data_vars:
-        ds = ds.rename({'spatial_ref': 'crs'})
     if 'crs' in ds.data_vars:
+        ds = ds.rename({'crs': 'spatial_ref'})
+    if 'spatial_ref' in ds.data_vars:
         # get the epsg code
         epsg_code = pyproj.CRS.from_wkt(
-            ds.crs.spatial_ref,
+            ds.spatial_ref.crs_wkt,
         ).to_epsg()
+    elif known_epsg:
+        epsg_code = known_epsg
     else:
         warnings.warn(
             'No CRS variable found in dataset. Assuming EPSG:4326.'

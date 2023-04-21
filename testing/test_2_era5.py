@@ -8,7 +8,11 @@ import xarray as xr
 from pathlib import Path
 from typing import List
 
-TEST_SHP = Path.cwd() / 'test_data/LEEM_boundary.shp'
+TEST_DATA_DIR = Path.cwd() / 'test_data'
+if not TEST_DATA_DIR.exists():
+    TEST_DATA_DIR = Path.cwd() / 'testing/test_data'
+TEST_SHP = TEST_DATA_DIR / 'LEEM_boundary.shp'
+
 CDS_VARIABLES = [
     '2m_temperature',
     '100m_u_component_of_wind',
@@ -17,6 +21,10 @@ AWS_VARIABLES = [
     'air_temperature_at_2_metres',
     'eastward_wind_at_100_metres',
 ]
+
+# LATITUDE AND LONGITUDE TOLERANCE
+# NOTE: the exact max/min lat/lon can change from CDS even using the same request
+CDS_COORDS_TOLERANCE = 0.001
 
 # DEFINE DATA RETRIEVAL FUNCTIONS ####################################
 
@@ -97,15 +105,23 @@ def test_cds_dataset() -> None:
     assert cds_era5_dataset.attrs['x_dim'] == 'longitude'
     assert len(cds_era5_dataset.longitude) == 19
     assert cds_era5_dataset.longitude.dtype == 'float32'
-    assert cds_era5_dataset.longitude[0].item() == -83.47599792480469
-    assert cds_era5_dataset.longitude[-1].item() == -78.9749984741211
+    assert abs(
+        cds_era5_dataset.longitude[0].item() - float(-83.47599792480469)
+    ) < CDS_COORDS_TOLERANCE
+    assert abs(
+        cds_era5_dataset.longitude[-1].item() - float(-78.9749984741211)
+    ) < CDS_COORDS_TOLERANCE
 
     # check latitude dimension
     assert cds_era5_dataset.attrs['y_dim'] == 'latitude'
     assert len(cds_era5_dataset.latitude) == 7
     assert cds_era5_dataset.latitude.dtype == 'float32'
-    assert cds_era5_dataset.latitude[0].item() == 42.882999420166016
-    assert cds_era5_dataset.latitude[-1].item() == 41.382999420166016
+    assert abs(
+        cds_era5_dataset.latitude[0].item() - float(42.882999420166016)
+    ) < CDS_COORDS_TOLERANCE
+    assert abs(
+        cds_era5_dataset.latitude[-1].item() - float(41.382999420166016)
+    ) < CDS_COORDS_TOLERANCE
 
     # check the variables
     for data_var in CDS_VARIABLES:
@@ -168,3 +184,9 @@ def test_aws_dataset() -> None:
     # check the spatial reference (note WGS 84 corresponds to EPSG:4326)
     assert aws_era5_dataset.attrs['EPSG'] == 4326
     assert aws_era5_dataset.spatial_ref.attrs['geographic_crs_name'] == 'WGS 84'
+
+
+if '__main__' == __name__:
+    test_bounding_box()
+    test_cds_dataset()
+    test_aws_dataset()

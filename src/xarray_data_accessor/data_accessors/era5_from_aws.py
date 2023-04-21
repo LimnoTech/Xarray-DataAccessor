@@ -23,6 +23,7 @@ from xarray_data_accessor.multi_threading import (
 from xarray_data_accessor.data_accessors.shared_functions import (
     combine_variables,
     apply_kwargs,
+    write_crs,
     crop_data,
     crop_time_dimension,
 )
@@ -267,11 +268,15 @@ class AWSDataAccessor(DataAccessorBase):
                 {list(ds.data_vars)[0]: variable},
             )
 
+            all_data_dict[variable] = write_crs(
+                all_data_dict[variable],
+                known_epsg=4326,
+            )
+
         # return the combined data
         return combine_variables(
             all_data_dict,
             self.attrs_dict,
-            epsg=4326,
         )
 
     # AWS specific methods #####################################################
