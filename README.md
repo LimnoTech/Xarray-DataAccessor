@@ -102,11 +102,11 @@ Functionality has not been thoroughly tested...documentation pending.
 - [x] Build a function to sample data across the time dimension and export to a table file.
 - [x] Build a `pytest` test suite for the two ERA5 data accessors as well as the `DataAccessorFactory` class functions.
 - [x] Set up documentation structure.
-- [ ] Build a `DataAccessorBase` implementation to fetch elevation data.
+- [x] Build a `DataAccessorBase` implementation to NASA LP-DAAC data (elevation and land cover).
 - [ ] Build a function to temporally resample data.
 - [ ] Build a `pytest` test suite for all the data transformation functions.
 - [ ] Build "Data Stacks" that align data from different sources such that it is ready for modelling.
-- [ ] Build a `DataAccessorBase` implementation to fetch soils data.
+- [ ] Build a `DataAccessorBase` implementation to fetch soils data (type and moisture).
 - [ ] Make the package pip installable.
 
 
