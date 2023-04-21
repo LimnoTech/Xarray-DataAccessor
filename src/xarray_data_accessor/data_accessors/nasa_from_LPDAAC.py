@@ -40,9 +40,15 @@ from xarray_data_accessor.data_accessors.nasa_info import (
 )
 
 
+class AuthorizationDict(TypedDict):
+    """TypedDict for NASA authorization credentials"""
+    username: str
+    password: str
+
+
 class NASAKwargsDict(TypedDict):
     """TypedDict for NASA data accessor kwargs"""
-    authorization: Dict[str, str]
+    authorization: AuthorizationDict
     use_dask: bool
     thread_limit: int
 
