@@ -110,4 +110,4 @@ def test_dem() -> None:
 
     # check the spatial reference (note WGS 84 corresponds to EPSG:4326)
     assert dem.attrs['EPSG'] == 4326
-    assert dem.crs.attrs['geographic_crs_name'] == 'WGS 84'
+    assert dem.spatial_ref.attrs['geographic_crs_name'] == 'WGS 84'
