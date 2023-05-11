@@ -1,7 +1,7 @@
 
 [![Pre-Commit Status](https://github.com/LimnoTech/Xarray-DataAccessor/actions/workflows/pre-commit.yml/main.svg)](https://github.com/LimnoTech/Xarray-DataAccessor/actions/workflows/pre-commit.yml)
-Xarray-DataAccessor Documentation
-==================================
+
+# Xarray-DataAccessor Documentation
 
 ## Core Features
 * Efficiently reads remote gridded data for an Area of Interest (AOI) into [Xarray.Dataset](https://docs.xarray.dev/en/stable/) objects using [dask.distributed](https://distributed.dask.org/en/stable/) for parallelization.
