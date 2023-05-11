@@ -22,7 +22,7 @@ class DataAccessorFactory:
     @classmethod
     def register(
         cls,
-        data_accessor: DataAccessorBase
+        data_accessor: DataAccessorBase,
     ):
         cls.__data_accessors[data_accessor.__name__] = data_accessor
 

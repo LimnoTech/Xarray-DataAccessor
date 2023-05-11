@@ -15,7 +15,7 @@ NOTE: AWS single levels (hourly) data variables have different names and are sto
     s3 bucket docs: https://github.com/planet-os/notebooks/blob/master/aws/era5-pds.md
     dataset = 'reanalysis-era5-single-levels'.
 
-CDS ERA5 DATASETS 
+CDS ERA5 DATASETS
 --------------------------------
 Single levels (hourly) variables
 * reanalysis-era5-single-levels

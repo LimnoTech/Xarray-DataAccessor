@@ -51,11 +51,11 @@ def apply_kwargs(
     for key, value in kwargs_dict.items():
         if key not in accessor_kwargs_dict.keys():
             warnings.warn(
-                f'Kwarg: {key} is allowed valid for {accessor_object.__name__}.'
+                f'Kwarg: {key} is allowed valid for {accessor_object.__name__}.',
             )
         elif not isinstance(value, accessor_kwargs_dict[key]):
             warnings.warn(
-                f'Kwarg: {key} should be of type {accessor_kwargs_dict[key]}.'
+                f'Kwarg: {key} should be of type {accessor_kwargs_dict[key]}.',
             )
         else:
             setattr(accessor_object, key, value)
@@ -77,7 +77,7 @@ def combine_variables(
 
     if len(del_keys) > 0:
         warnings.warn(
-            f'Could not get data for the following variables: {del_keys}'
+            f'Could not get data for the following variables: {del_keys}',
         )
         for k in del_keys:
             dataset_dict.pop(k)
@@ -85,7 +85,7 @@ def combine_variables(
     # if just one variable, return the dataset
     if len(dataset_dict) == 0:
         raise ValueError(
-            f'A problem occurred! No data was returned.'
+            f'A problem occurred! No data was returned.',
         )
 
     # combine the data from multiple sources
@@ -114,7 +114,7 @@ def write_crs(
         epsg_code = known_epsg
     else:
         warnings.warn(
-            'No CRS variable found in dataset. Assuming EPSG:4326.'
+            'No CRS variable found in dataset. Assuming EPSG:4326.',
         )
         epsg_code = 4326
 
@@ -183,10 +183,10 @@ def crop_data(
 
     # find closest x, y values in the data
     nearest_x_idxs = np.abs(
-        ds[x_dim].values - x_bounds.reshape(-1, 1)
+        ds[x_dim].values - x_bounds.reshape(-1, 1),
     ).argmin(axis=1)
     nearest_y_idxs = np.abs(
-        ds[y_dim].values - y_bounds.reshape(-1, 1)
+        ds[y_dim].values - y_bounds.reshape(-1, 1),
     ).argmin(axis=1)
 
     # return the sliced dataset
@@ -194,7 +194,7 @@ def crop_data(
         {
             x_dim: slice(nearest_x_idxs.min(), nearest_x_idxs.max() + 1),
             y_dim: slice(nearest_y_idxs.min(), nearest_y_idxs.max() + 1),
-        }
+        },
     ).copy()
 
 

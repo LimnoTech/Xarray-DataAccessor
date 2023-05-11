@@ -35,13 +35,13 @@ import xarray_data_accessor
 
 ## Exploring Available Data
 All data one can retrieve with this library is organized in a three tier hierarchy:
-1. A "data accessor" is a python class that interacts with a given data source. 
+1. A "data accessor" is a python class that interacts with a given data source.
     * Each data accessor can retrieve data from any number of specific datasets.
     * For example: `CDSDataAccessor` accesses the [CDS API](https://cds.climate.copernicus.eu/cdsapp#!/search?type=dataset) and can currently be used to access a few ERA5 datasets.
 2. A specific dataset may be something like "reanalysis-era5-single-levels". Note that the same dataset may be able to be accessed by different data accessors.
 3. Each dataset will contain one or more variables.
 
-To allow this library to be extendable, the "data accessors", the datasets they can access, and the variables that exist in each dataset are not hardcoded anywhere in the repo. 
+To allow this library to be extendable, the "data accessors", the datasets they can access, and the variables that exist in each dataset are not hardcoded anywhere in the repo.
 
 **Therefore to explore what is available, one can use the following `xarray_data_accessor.DataAccessorFactory` class functions:**
 ```python
@@ -108,11 +108,3 @@ Functionality has not been thoroughly tested...documentation pending.
 - [ ] Build "Data Stacks" that align data from different sources such that it is ready for modelling.
 - [ ] Build a `DataAccessorBase` implementation to fetch soils data (type and moisture).
 - [ ] Make the package pip installable.
-
-
-
-
-
-
-
-

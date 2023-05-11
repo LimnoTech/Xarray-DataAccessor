@@ -106,10 +106,10 @@ def test_cds_dataset() -> None:
     assert len(cds_era5_dataset.longitude) == 19
     assert cds_era5_dataset.longitude.dtype == 'float32'
     assert abs(
-        cds_era5_dataset.longitude[0].item() - float(-83.47599792480469)
+        cds_era5_dataset.longitude[0].item() - float(-83.47599792480469),
     ) < CDS_COORDS_TOLERANCE
     assert abs(
-        cds_era5_dataset.longitude[-1].item() - float(-78.9749984741211)
+        cds_era5_dataset.longitude[-1].item() - float(-78.9749984741211),
     ) < CDS_COORDS_TOLERANCE
 
     # check latitude dimension
@@ -117,10 +117,10 @@ def test_cds_dataset() -> None:
     assert len(cds_era5_dataset.latitude) == 7
     assert cds_era5_dataset.latitude.dtype == 'float32'
     assert abs(
-        cds_era5_dataset.latitude[0].item() - float(42.882999420166016)
+        cds_era5_dataset.latitude[0].item() - float(42.882999420166016),
     ) < CDS_COORDS_TOLERANCE
     assert abs(
-        cds_era5_dataset.latitude[-1].item() - float(41.382999420166016)
+        cds_era5_dataset.latitude[-1].item() - float(41.382999420166016),
     ) < CDS_COORDS_TOLERANCE
 
     # check the variables

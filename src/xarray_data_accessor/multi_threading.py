@@ -87,7 +87,7 @@ def get_multithread(
         except Exception as e:
             warnings.warn(
                 f'Could not start dask -> reverting to concurrent.futures. '
-                f'The following exception was received: {e}'
+                f'The following exception was received: {e}',
             )
             del as_completed
             use_dask = False

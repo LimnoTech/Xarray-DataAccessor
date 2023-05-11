@@ -37,7 +37,7 @@ def _get_datetime(input_date: TimeInput) -> datetime:
     elif isinstance(input_date, int):
         if input_date not in list(range(1950, datetime.now().year + 1)):
             raise ValueError(
-                f'integer start/end date input={input_date} is not a valid year.'
+                f'integer start/end date input={input_date} is not a valid year.',
             )
         return pd.to_datetime(f'{input_date}-01-01')
 
@@ -45,7 +45,7 @@ def _get_datetime(input_date: TimeInput) -> datetime:
         return pd.to_datetime(input_date)
     else:
         raise ValueError(
-            f'start/end date input={input_date} is invalid.'
+            f'start/end date input={input_date} is invalid.',
         )
 
 
@@ -61,7 +61,7 @@ def _convert_timezone(
             raise UnknownTimeZoneError(
                 f'Invalid timezone={tz}. '
                 f'See https://en.wikipedia.org/wiki/List_of_tz_database_time_zones '
-                f'for a list of timezone identified strings (TZ identifier)'
+                f'for a list of timezone identified strings (TZ identifier)',
             )
 
     # return converted datetime
@@ -136,10 +136,11 @@ def _bbox_from_shp(
             shapefile = Path(shapefile)
         if not shapefile.exists():
             raise FileNotFoundError(
-                f'Input path {shapefile} is not found.')
+                f'Input path {shapefile} is not found.',
+            )
         if not shapefile.suffix == '.shp':
             raise ValueError(
-                f'Input path {shapefile} is not a .shp file!'
+                f'Input path {shapefile} is not a .shp file!',
             )
         geo_df = gpd.read_file(shapefile)
 
@@ -196,9 +197,10 @@ def _resample_slice(
             dst_crs=resample_dict['crs'],
             shape=(resample_dict['height'], resample_dict['width']),
             resampling=getattr(
-                Resampling, resample_dict['resampling_method']),
+                Resampling, resample_dict['resampling_method'],
+            ),
             kwargs={'dst_nodata': np.nan},
-        )
+        ),
     )
 
 
@@ -273,7 +275,7 @@ def _verify_variables(
     if len(cant_add_variables) > 0:
         warnings.warn(
             f'The following requested variables are not in the dataset:'
-            f' {cant_add_variables}.'
+            f' {cant_add_variables}.',
         )
     return data_variables
 
@@ -289,7 +291,7 @@ def _get_coords_df(
         if isinstance(csv_of_coords, Path):
             if not csv_of_coords.exists() or not csv_of_coords.suffix == '.csv':
                 raise ValueError(
-                    f'param:csv_of_coords must be a valid .csv file.'
+                    f'param:csv_of_coords must be a valid .csv file.',
                 )
         if isinstance(csv_of_coords, pd.DataFrame):
             coords_df = csv_of_coords
@@ -326,7 +328,7 @@ def _get_coords_df(
         )
     else:
         raise ValueError(
-            'Must specify either param:coords or param:csv_of_coords'
+            'Must specify either param:coords or param:csv_of_coords',
         )
     return coords_df
 
@@ -345,16 +347,18 @@ def _get_data_table_vectorized(
     # unpack dimension names
     x_dim, y_dim = xy_dims
     logging.info(
-        f'Extracting {variable} data (vectorized method)'
+        f'Extracting {variable} data (vectorized method)',
     )
 
     # get batches of max 100 points to avoid memory overflow
     batch_size = 100
-    start_stops_idxs = list(range(
-        0,
-        len(xarray_dataset.time) + 1,
-        batch_size,
-    ))
+    start_stops_idxs = list(
+        range(
+            0,
+            len(xarray_dataset.time) + 1,
+            batch_size,
+        ),
+    )
 
     # init list to store dataframes
     out_dfs = []
@@ -366,12 +370,12 @@ def _get_data_table_vectorized(
         else:
             stop = None
         logging.info(
-            f'Processing time slice [{num}:{stop}]. datetime={datetime.now()}'
+            f'Processing time slice [{num}:{stop}]. datetime={datetime.now()}',
         )
 
         # make a copy of the data for our variable of interest
         ds = xarray_dataset[variable].isel(
-            time=slice(start, stop)
+            time=slice(start, stop),
         ).load()
 
         # convert x/y dimensions to integer indexes
@@ -411,7 +415,7 @@ def _get_data_table_vectorized(
                 columns=point_ids,
                 index=index,
                 data=data,
-            ).sort_index(axis=1).sort_index(axis=0)
+            ).sort_index(axis=1).sort_index(axis=0),
         )
         del data
         del index
@@ -426,7 +430,7 @@ def _get_data_table_vectorized(
     # save to file
     if save_table_dir:
         logging.info(
-            f'Saving df to {save_table_dir}, datetime={datetime.now()}'
+            f'Saving df to {save_table_dir}, datetime={datetime.now()}',
         )
         table_path = _save_dataframe(
             out_df,
@@ -459,31 +463,31 @@ def _save_dataframe(
         save_table_dir = Path(save_table_dir)
     if not save_table_dir.exists():
         warnings.warn(
-            f'Output directory {save_table_dir} does not exist!'
+            f'Output directory {save_table_dir} does not exist!',
         )
 
     if save_table_suffix is None or save_table_suffix == '.parquet':
         out_path = Path(
-            save_table_dir / f'{prefix}{variable}.parquet'
+            save_table_dir / f'{prefix}{variable}.parquet',
         )
         df.to_parquet(out_path)
 
     elif save_table_suffix == '.csv':
         out_path = Path(
-            save_table_dir / f'{prefix}{variable}.csv'
+            save_table_dir / f'{prefix}{variable}.csv',
         )
         df.to_csv(out_path)
 
     elif save_table_suffix == '.xlsx':
         out_path = Path(
-            save_table_dir / f'{prefix}{variable}.xlsx'
+            save_table_dir / f'{prefix}{variable}.xlsx',
         )
         df.to_excel(out_path)
     else:
         raise ValueError(
-            f'{save_table_suffix} is not a valid table format!'
+            f'{save_table_suffix} is not a valid table format!',
         )
     logging.info(
-        f'Data for variable={variable} saved @ {save_table_dir}'
+        f'Data for variable={variable} saved @ {save_table_dir}',
     )
     return out_path

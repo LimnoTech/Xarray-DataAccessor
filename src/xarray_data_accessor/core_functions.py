@@ -71,7 +71,7 @@ def get_xarray_dataset(
         :param combine_aois: If True, combines all AOIs into one.
         :param resample_factor: The factor to resample the data by.
         :param xy_resolution_factors: The X,Y dimension factors to resample the data by.
-        :param kwargs: Additional keyword arguments to pass to 
+        :param kwargs: Additional keyword arguments to pass to
             the underlying data accessor.get_data() function.
 
     Return:
@@ -81,7 +81,7 @@ def get_xarray_dataset(
     if data_accessor_name not in DataAccessorFactory.data_accessor_names():
         raise ValueError(
             f"Data accessor '{data_accessor_name}' does not exist. "
-            f"Please choose from {DataAccessorFactory.data_accessor_names()}."
+            f"Please choose from {DataAccessorFactory.data_accessor_names()}.",
         )
     else:
         data_accessor = DataAccessorFactory.get_data_accessor(
@@ -175,7 +175,7 @@ def get_bounding_box(
     # make sure we are not using multiple inputs at once
     if sum(x is not None for x in inputs_dict.values()) > 1 and not union_bbox:
         raise ValueError(
-            'Only one input can be used at a time unless param:union_bbox=True!'
+            'Only one input can be used at a time unless param:union_bbox=True!',
         )
 
     # get bounding boxes
@@ -186,7 +186,8 @@ def get_bounding_box(
                 outputs_dict[key] = utility_functions._bbox_from_coords(value)
             elif key == 'csv':
                 outputs_dict[key] = utility_functions._bbox_from_coords_csv(
-                    value)
+                    value,
+                )
             elif key == 'shapefile':
                 outputs_dict[key] = utility_functions._bbox_from_shp(value)
             elif key == 'raster':
@@ -212,7 +213,7 @@ def subset_time_by_timezone(
 
     Arguments:
         :param xarray_dataset: The xarray dataset to subset.
-        :param timezone: A valid pytz timezone string. 
+        :param timezone: A valid pytz timezone string.
             Example: 'America/New_York'
         :start_time: The start time input to subset from.
         :end_time: The end time input to subset to.
@@ -223,11 +224,11 @@ def subset_time_by_timezone(
     # check if necessary dimensions exist
     if 'time' not in xarray_dataset.dims:
         raise ValueError(
-            'The dataset must have a time dimension to subset by timezone!'
+            'The dataset must have a time dimension to subset by timezone!',
         )
     if 'timezone' not in xarray_dataset.attrs.keys():
         warnings.warn(
-            'The dataset is lacking a timezone attribute! Assuming UTC.'
+            'The dataset is lacking a timezone attribute! Assuming UTC.',
         )
         out_timezone = 'UTC'
     out_timezone = xarray_dataset.attrs['time_zone']
@@ -261,14 +262,14 @@ def spatial_resample(
     """Resamples self.xarray_dataset
 
     Arguments:
-        :param resolution_factor: the number of times FINER to make the 
+        :param resolution_factor: the number of times FINER to make the
             dataset (applied to both dimensions).
             Example: resolution=10 on a 0.25 -> 0.025 resolution.
-        :param xy_resolution_factors: Allows one to specify a resolution 
+        :param xy_resolution_factors: Allows one to specify a resolution
             factor for the X[0] and Y[1] dimensions.
-        :param resample_method: A valid resampling method from rasterio.enums.Resample 
-            NOTE: The default is 'nearest'. Do not use any averaging resample 
-            methods when working with a categorical raster! 
+        :param resample_method: A valid resampling method from rasterio.enums.Resample
+            NOTE: The default is 'nearest'. Do not use any averaging resample
+            methods when working with a categorical raster!
             Bilinear resampling is the default.
 
     Returns:
@@ -278,12 +279,12 @@ def spatial_resample(
     # verify all required inputs are present
     if xarray_dataset is None:
         raise ValueError(
-            'self.xarray_dataset is None! You must use get_data() first.'
+            'self.xarray_dataset is None! You must use get_data() first.',
         )
     if resolution_factor is None and xy_resolution_factors is None:
         raise ValueError(
             'Must provide an input for either param:resolution_factor or '
-            'param:xy_resolution_factors'
+            'param:xy_resolution_factors',
         )
 
     # verify the resample methods
@@ -292,7 +293,7 @@ def spatial_resample(
         resample_method = 'bilinear'
     elif resample_method not in real_methods:
         raise ValueError(
-            f'Resampling method {resample_method} is invalid! Please select from {real_methods}'
+            f'Resampling method {resample_method} is invalid! Please select from {real_methods}',
         )
 
     # apply the resampling
@@ -306,7 +307,7 @@ def spatial_resample(
     renamed = False
     if x_dim != 'x' or y_dim != 'y':
         xarray_dataset = xarray_dataset.rename(
-            {x_dim: 'x', y_dim: 'y'}
+            {x_dim: 'x', y_dim: 'y'},
         )
         renamed = True
 
@@ -322,7 +323,7 @@ def spatial_resample(
 
     # resample and return the adjusted dataset
     logging.info(
-        f'Resampling to height={height}, width={width}. datetime={datetime.now()}'
+        f'Resampling to height={height}, width={width}. datetime={datetime.now()}',
     )
     xarray_dataset = utility_functions._resample_slice(
         data=xarray_dataset,
@@ -332,11 +333,12 @@ def spatial_resample(
             'resampling_method': resample_method,
             'crs': crs,
             'index': 1,
-        })[-1]
+        },
+    )[-1]
 
     if renamed:
         xarray_dataset = xarray_dataset.rename(
-            {'x': x_dim, 'y': y_dim}
+            {'x': x_dim, 'y': y_dim},
         )
     logging.info(f'Resampling complete: datetime={datetime.now()}')
     logging.info(f'Resampled dataset info: {xarray_dataset.dims}')
@@ -399,16 +401,20 @@ def get_data_tables(
     nearest_y_idxs = np.abs(ds_ys - point_ys.reshape(-1, 1)).argmin(axis=1)
 
     # get a dict with point IDs as keys, and nearest x/y indices as values
-    points_nearest_xy_idxs = dict(zip(
-        point_ids,
-        zip(nearest_x_idxs, nearest_y_idxs)
-    ))
+    points_nearest_xy_idxs = dict(
+        zip(
+            point_ids,
+            zip(nearest_x_idxs, nearest_y_idxs),
+        ),
+    )
 
     # get all x/long to y/lat combos
-    combos = list(itertools.product(
-        range(len(xarray_dataset[x_dim].values)),
-        range(len(xarray_dataset[y_dim].values)),
-    ))
+    combos = list(
+        itertools.product(
+            range(len(xarray_dataset[x_dim].values)),
+            range(len(xarray_dataset[y_dim].values)),
+        ),
+    )
 
     # make sure they are in the right order to reshape!
     combo_dict = dict(zip(combos, range(len(combos))))
@@ -430,7 +436,7 @@ def get_data_tables(
 
     # prep chunks
     xarray_dataset = xarray_dataset.chunk(
-        {'time': 10000, x_dim: 10, y_dim: 10}
+        {'time': 10000, x_dim: 10, y_dim: 10},
     )
 
     # get data for each variable

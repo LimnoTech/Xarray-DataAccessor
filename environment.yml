@@ -7,7 +7,7 @@ channels:
 dependencies:
   - python >=3.10
 
-  # For data processing 
+  # For data processing
   - pandas
   - xarray
   - rioxarray
@@ -41,6 +41,7 @@ dependencies:
   - pylsp-mypy  # MyPy type checking for Python >=3.7.
   - jupyterlab-lsp # Provides both server extension and lab extension
   - pytest # for running our /testing suite
+  - pre-commit
 
   # Package management
   - conda
@@ -48,5 +49,3 @@ dependencies:
   - mamba
   - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
   - pip
-
-

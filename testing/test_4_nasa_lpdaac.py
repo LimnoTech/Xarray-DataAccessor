@@ -42,7 +42,7 @@ def get_authentication_dict() -> AuthorizationDict:
         raise KeyError(
             f'{e} ---- You must add your EarthData credentials to your environment '
             f'to run this test! ---- Ex: EARTHDATA_USERNAME="my_username", '
-            f'EARTHDATA_PASSWORD="my_password".'
+            f'EARTHDATA_PASSWORD="my_password".',
         ) from e
 
 
@@ -53,7 +53,7 @@ def get_nasadem_nc(
     """
     Gets NASADEM_NC data (NetCDF format) from the LPDAAC DataPool.
 
-    NOTE: This data does not contain a time dimension, but start/end times 
+    NOTE: This data does not contain a time dimension, but start/end times
     are still required.
     """
     return xarray_data_accessor.get_xarray_dataset(

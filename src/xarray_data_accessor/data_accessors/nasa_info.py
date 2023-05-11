@@ -2,7 +2,7 @@
 
 Supported NASA providers (Data Access Centers) --------------------------------
 Provider: LP DAAC = Land Processes Distributed Active Archive Center.
-    Info: LP DAAC is a partnership between USGS and NASA. It is a component of the 
+    Info: LP DAAC is a partnership between USGS and NASA. It is a component of the
         Earth Observing System Data and Information System (EOSDIS).
     Data Source: Data is pulled from the LP DAAC Data Pool.
         See: https://lpdaac.usgs.gov/tools/data-pool/
@@ -61,10 +61,10 @@ LPDAAC_XY_DIMS = {
 LPDAAC_EPSG = {
     'NASADEM_NC': 4326,
     'NASADEM_SC': 4326,
-    'GLanCE30': None
+    'GLanCE30': None,
 }
 LPDAAC_WKT = {
     'NASADEM_NC': None,
     'NASADEM_SC': None,
-    'GLanCE30': 'PROJCS["BU MEaSUREs Lambert Azimuthal Equal Area - NA - V01",GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["false_easting",0.0],PARAMETER["false_northing",0.0],PARAMETER["longitude_of_center",-100],PARAMETER["latitude_of_center",50],UNIT["meter",1.0]]'
+    'GLanCE30': 'PROJCS["BU MEaSUREs Lambert Azimuthal Equal Area - NA - V01",GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["degree",0.0174532925199433]],PROJECTION["Lambert_Azimuthal_Equal_Area"],PARAMETER["false_easting",0.0],PARAMETER["false_northing",0.0],PARAMETER["longitude_of_center",-100],PARAMETER["latitude_of_center",50],UNIT["meter",1.0]]',
 }

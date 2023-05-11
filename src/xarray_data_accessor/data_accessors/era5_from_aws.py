@@ -176,7 +176,7 @@ class AWSDataAccessor(DataAccessorBase):
         if dataset_name not in self.supported_datasets():
             raise ValueError(
                 f'param:dataset_name must be one of the following: '
-                f'{self.supported_datasets()}'
+                f'{self.supported_datasets()}',
             )
         else:
             self.dataset_name = dataset_name
@@ -217,7 +217,8 @@ class AWSDataAccessor(DataAccessorBase):
 
         with client as executor:
             logging.info(
-                f'Reading {len(aws_request_dicts)} data months from S3 bucket.')
+                f'Reading {len(aws_request_dicts)} data months from S3 bucket.',
+            )
             # map all our input dicts to our data getter function
             futures = {
                 executor.submit(self._get_aws_data, arg): arg for arg in aws_request_dicts
@@ -237,7 +238,7 @@ class AWSDataAccessor(DataAccessorBase):
                     data_dicts[var][index] = ds
                 except Exception as e:
                     logging.warning(
-                        f'Exception hit!: {e}'
+                        f'Exception hit!: {e}',
                     )
 
         for variable in variables:
@@ -287,7 +288,7 @@ class AWSDataAccessor(DataAccessorBase):
         if len(time_dim) > 1:
             warnings.warn(
                 f'Multiple time dimensions found! {time_dim}. '
-                'Changing the first to time. This may cascade errors.'
+                'Changing the first to time. This may cascade errors.',
             )
         rename_dict = {
             'lon': 'longitude',
@@ -340,7 +341,7 @@ class AWSDataAccessor(DataAccessorBase):
                             'aws_endpoint': endpoint,
                             'index': count,
                             'bbox': bbox,
-                        }
+                        },
                     )
                     count += 1
         return aws_request_dicts

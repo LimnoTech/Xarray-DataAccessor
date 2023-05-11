@@ -170,7 +170,7 @@ class CDSDataAccessor(DataAccessorBase):
         if dataset_name not in self.supported_datasets():
             raise ValueError(
                 f'param:dataset_name must be one of the following: '
-                f'{self.supported_datasets()}'
+                f'{self.supported_datasets()}',
             )
         else:
             self.dataset_name = dataset_name
@@ -213,22 +213,24 @@ class CDSDataAccessor(DataAccessorBase):
                 var_dict = {}
                 input_dicts = []
                 for i, time_dict in enumerate(time_dicts):
-                    input_dicts.append(dict(
-                        time_dict,
-                        **{
-                            'product_type': 'reanalysis',
-                            'variable': variable,
-                            'format': self.file_format,
-                            'grid': [0.25, 0.25],
-                            'area': [
-                                bbox['south'],
-                                bbox['west'],
-                                bbox['north'],
-                                bbox['east'],
-                            ],
-                            'index': i,
-                        }
-                    ))
+                    input_dicts.append(
+                        dict(
+                            time_dict,
+                            **{
+                                'product_type': 'reanalysis',
+                                'variable': variable,
+                                'format': self.file_format,
+                                'grid': [0.25, 0.25],
+                                'area': [
+                                    bbox['south'],
+                                    bbox['west'],
+                                    bbox['north'],
+                                    bbox['east'],
+                                ],
+                                'index': i,
+                            }
+                        ),
+                    )
 
                 # only send 10 at once to prevent being throttled
                 batches = list(range((len(input_dicts) // 10) + 1))
@@ -255,7 +257,7 @@ class CDSDataAccessor(DataAccessorBase):
                             var_dict[index] = ds
                         except Exception as e:
                             logging.warning(
-                                f'Exception hit!: {e}'
+                                f'Exception hit!: {e}',
                             )
 
                 # reconstruct each variable into a DataArray
@@ -335,7 +337,7 @@ class CDSDataAccessor(DataAccessorBase):
             warnings.warn(
                 f'param:file_format={file_format} must be in '
                 f'{cls.file_format_dict.keys()}. Defaulting to '
-                f'file_format=netcdf'
+                f'file_format=netcdf',
             )
             return 'netcdf'
 
@@ -346,7 +348,7 @@ class CDSDataAccessor(DataAccessorBase):
             except ImportError:
                 warnings.warn(
                     'No GRIB support -> NetCDF only. Install cfgrib if needed. '
-                    'Defaulting to file_format=netcdf'
+                    'Defaulting to file_format=netcdf',
                 )
                 return 'netcdf'
 
@@ -395,7 +397,7 @@ class CDSDataAccessor(DataAccessorBase):
             if delta > 0:
                 warnings.warn(
                     f'Not all param:specific hours were < 24, and >=0. '
-                    f'{delta} have been ignored'
+                    f'{delta} have been ignored',
                 )
             del i_len, delta
 
@@ -437,7 +439,8 @@ class CDSDataAccessor(DataAccessorBase):
                 else:
                     e_dt = (
                         pd.to_datetime(
-                            f'{int(month) + 1}/1/{year}') - timedelta(days=1)
+                            f'{int(month) + 1}/1/{year}',
+                        ) - timedelta(days=1)
                     )
 
                 days = self._get_days_list(s_dt, e_dt)
@@ -481,7 +484,7 @@ class CDSDataAccessor(DataAccessorBase):
                 dir=Path.cwd(),
                 prefix='temp_data',
                 suffix=self.file_format_dict[self.file_format],
-            ).name
+            ).name,
         ).name
 
         # remove index from input dict

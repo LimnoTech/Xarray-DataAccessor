@@ -43,7 +43,8 @@ def test_datasets():
     # get the supported datasets for the data accessor
     for data_accessor_name in DataAccessorFactory.data_accessor_names():
         supported_datasets = DataAccessorFactory.supported_datasets()[
-            data_accessor_name]
+            data_accessor_name
+        ]
         assert isinstance(supported_datasets, list)
         assert len(supported_datasets) > 0
 
@@ -53,7 +54,8 @@ def test_dataset_variables():
     # get the supported datasets for the data accessor
     for data_accessor_name in DataAccessorFactory.data_accessor_names():
         datasets = DataAccessorFactory.supported_datasets()[
-            data_accessor_name]
+            data_accessor_name
+        ]
 
         # get the supported variables for each dataset
         for dataset_name in datasets:

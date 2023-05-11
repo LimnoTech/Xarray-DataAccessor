@@ -134,7 +134,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         credential_error = ValueError(
             'NASA data accessors require EarthData login credentials. '
             'Please provide them as the argument "authorization" using '
-            'a dictionary with keys: "username" and "password".'
+            'a dictionary with keys: "username" and "password".',
         )
         if 'authorization' not in kwargs_dict.keys():
             raise credential_error
@@ -217,7 +217,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
                         data.append(future.result())
                     except Exception as e:
                         logging.warning(
-                            f'Exception hit!: {e}'
+                            f'Exception hit!: {e}',
                         )
 
             # close client
@@ -326,8 +326,10 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
         # get bounding box by parsing the polygon
         elif 'polygons' in entry_dict.keys():
             # coords a list of lat, lon, lat, lon,... values
-            coords = [float(i)
-                      for i in entry_dict['polygons'][0][0].split(' ')]
+            coords = [
+                float(i)
+                for i in entry_dict['polygons'][0][0].split(' ')
+            ]
             lats = coords[::2]
             lons = coords[1::2]
             bbox = [min(lats), min(lons), max(lats), max(lons)]
@@ -366,17 +368,17 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             if start_dt.year not in valid_years and end_dt.year not in valid_years:
                 raise ValueError(
                     glance_years_warning +
-                    f'Start date {start_dt} and end date {end_dt} are both invalid!'
+                    f'Start date {start_dt} and end date {end_dt} are both invalid!',
                 )
             elif start_dt.year not in valid_years:
                 warnings.warn(
                     glance_years_warning +
-                    f'Start date {start_dt} is invalid! Some requested data will be missing.'
+                    f'Start date {start_dt} is invalid! Some requested data will be missing.',
                 )
             elif end_dt.year not in valid_years:
                 warnings.warn(
                     glance_years_warning +
-                    f'End date {end_dt} is invalid! Some requested data will be missing.'
+                    f'End date {end_dt} is invalid! Some requested data will be missing.',
                 )
 
             # warn if the user may have expected more years than returned
@@ -384,13 +386,13 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
                 warnings.warn(
                     'GLaNCE30 data is collected in 1 year increments on JULY 1st! '
                     'You may me expecting more data than returned because your '
-                    'range does not include all July 1st dates.'
+                    'range does not include all July 1st dates.',
                 )
 
             if len(granules_list) == 0:
                 raise ValueError(
                     'No data found for the given parameters! '
-                    'Note that GLanCE30 data is only available for NORTH AMERICA.'
+                    'Note that GLanCE30 data is only available for NORTH AMERICA.',
                 )
 
     def _find_matching_granules(
@@ -451,7 +453,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             return granules_list
         else:
             raise ValueError(
-                f'Error retrieving searching granules! See response text: {response.text}'
+                f'Error retrieving searching granules! See response text: {response.text}',
             )
 
     def _request_granule(
@@ -472,7 +474,7 @@ class NASA_LPDAAC_Accessor(DataAccessorBase):
             return response2
         else:
             raise ValueError(
-                f'Error retrieving granule! See response text: {response2.text}'
+                f'Error retrieving granule! See response text: {response2.text}',
             )
 
     def _get_netcdf_granule(
