@@ -10,7 +10,6 @@ __pycache__/
 examples/auth_config.py
 examples/example_data/*.tif
 examples/example_data/*.tif.ovr
-examples/.ipynb_checkpoints/**
 testing/test_data/*.csv
 testing/test_data/*.parquet
 testing/test_data/*.xlsx
@@ -20,3 +19,4 @@ lake_erie_data/nodes_data/**
 brazil_data/**
 .ipynb_checkpoints/**
 xarray_data_accessor/.ipynb_checkpoints/**
+examples/.ipynb_checkpoints/auth_config-checkpoint.py
