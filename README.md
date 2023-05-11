@@ -1,3 +1,5 @@
+
+[![Pre-Commit Status](https://github.com/LimnoTech/Xarray-DataAccessor/actions/workflows/pre-commit.yml/main.svg)](https://github.com/LimnoTech/Xarray-DataAccessor/actions/workflows/pre-commit.yml)
 Xarray-DataAccessor Documentation
 ==================================
 
