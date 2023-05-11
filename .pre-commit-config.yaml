@@ -8,6 +8,7 @@ repos:
       - id: check-case-conflict
       - id: debug-statements
       - id: end-of-file-fixer
+        exclude: examples
       - id: check-docstring-first
       - id: check-added-large-files
 
@@ -15,6 +16,7 @@ repos:
     rev: v2.0.2
     hooks:
       - id: autopep8
+        exclude: examples
 
   - repo: https://github.com/asottile/add-trailing-comma
     rev: v2.4.0
