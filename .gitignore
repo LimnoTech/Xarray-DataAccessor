@@ -10,6 +10,7 @@ __pycache__/
 examples/auth_config.py
 examples/example_data/*.tif
 examples/example_data/*.tif.ovr
+examples/.ipynb_checkpoints/**
 testing/test_data/*.csv
 testing/test_data/*.parquet
 testing/test_data/*.xlsx
