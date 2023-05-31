@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61", "wheel", "setuptools_scm[toml]>=3.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xarray_data_accessor"
+dynamic = ["version", "readme"]
+
+description = "Efficiently read climate/meteorology data into Xarray using Dask for parallelization."
+authors = [
+    {name = "Xavier Nogueira", email = "xavier.rojas.nogueira@gmail.com"},
+]
+
+requires-python = ">=3.11"
+keywords = [
+    'xarray',
+    'zarr',
+    'gridded-data',
+    'climate-data',
+    'meteorology-data',
+]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    'xarray',
+    'pandas',
+    'xarray',
+    'rioxarray',
+    'dask',
+    'geopandas',
+    'cdsapi',
+    'fsspec',
+    's3fs',
+    'cfgrib',
+    'eccodes',
+    'pyarrow',
+    'zarr',
+    'h5netcdf',
+    'openpyxl',
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["xarray_data_accessor*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "xarray_data_accessor.__version__"}
+readme = {file = "README.md"}
