@@ -105,8 +105,8 @@ Functionality has not been thoroughly tested...documentation pending.
 - [x] Build a `pytest` test suite for the two ERA5 data accessors as well as the `DataAccessorFactory` class functions.
 - [x] Set up documentation structure.
 - [x] Build a `DataAccessorBase` implementation to NASA LP-DAAC data (elevation and land cover).
-- [ ] Build a function to temporally resample data.
-- [ ] Build a `pytest` test suite for all the data transformation functions.
-- [ ] Build "Data Stacks" that align data from different sources such that it is ready for modelling.
+- [x] Build a function to temporally resample data.
+- [x] Build a `pytest` test suite for all the data transformation functions.
 - [ ] Build a `DataAccessorBase` implementation to fetch soils data (type and moisture).
+- [ ] Make it so the library writes a cdsapirc file, then set repo secrets, and enable automated testing.
 - [ ] Make the package pip installable.

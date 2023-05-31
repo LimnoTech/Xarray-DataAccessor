@@ -2,7 +2,7 @@ import abc
 from typing import (
     List,
     Tuple,
-    Dict,
+    Literal,
     Union,
     TypedDict,
 )
@@ -28,6 +28,20 @@ PossibleAOIInputs = Union[
     RasterInput,
 ]
 
+AggregationMethods = Literal[
+    'all',
+    'any',
+    'ffill',
+    'first',
+    'bfill',
+    'last',
+    'max',
+    'mean',
+    'median',
+    'min',
+    'sum',
+]
+
 
 class BoundingBoxDict(TypedDict):
     west: float
@@ -47,7 +61,7 @@ class InputDict(TypedDict):
     multithreading: bool
 
 
-class ResampleDict(TypedDict):
+class SpatialResampleDict(TypedDict):
     width: int
     height: int
     resampling_method: str

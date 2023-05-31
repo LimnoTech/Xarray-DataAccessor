@@ -1,11 +1,15 @@
 """Tests if data manipulation functions are working as expected."""
 import xarray as xr
+import numpy as np
 import pandas as pd
 from pathlib import Path
 import xarray_data_accessor
 import pytest
 from rasterio.enums import Resampling
-from typing import List
+from typing import (
+    List,
+    get_args,
+)
 
 # define fixtures
 
@@ -30,7 +34,7 @@ def test_dataset(test_dir) -> xr.Dataset:
 
 
 @pytest.fixture
-def resample_methods() -> List[str]:
+def spatial_resample_methods() -> List[str]:
     """Gets resampling method names from the Resampling enum."""
     names = []
     for member in Resampling:
@@ -39,7 +43,17 @@ def resample_methods() -> List[str]:
             names.append(member.name)
     return names
 
-# define tests
+
+@pytest.fixture
+def temporal_resample_methods() -> List[str]:
+    """Gets resampling method names xarray_data_accessor.shared_types."""
+    names = []
+    for member in get_args(xr.core.types.Interp1dOptions):
+        names.append(member)
+    for member in get_args(xarray_data_accessor.shared_types.AggregationMethods):
+        names.append(member)
+    print(names)
+    return names
 
 
 def test_timezone_subset(test_dataset) -> None:
@@ -55,14 +69,14 @@ def test_timezone_subset(test_dataset) -> None:
     del subset
 
 
-def test_spatial_resample(test_dataset, resample_methods) -> None:
+def test_spatial_resample(test_dataset, spatial_resample_methods) -> None:
     """Tests if spatial resampling is working as expected."""
     # assert xy dimension sizes
     assert len(test_dataset.longitude) == 19
     assert len(test_dataset.latitude) == 7
 
     # resample x2 with each method
-    for name in resample_methods:
+    for name in spatial_resample_methods:
         # use the resolution_factor argument
         test_dataset_rs1 = xarray_data_accessor.spatial_resample(
             xarray_dataset=test_dataset,
@@ -80,6 +94,33 @@ def test_spatial_resample(test_dataset, resample_methods) -> None:
         )
         assert len(test_dataset_rs2.longitude) == 19
         assert len(test_dataset_rs2.latitude) == 21
+
+
+def test_temporal_resample(test_dataset, temporal_resample_methods) -> None:
+    """Tests temporal resampling."""
+
+    assert len(test_dataset.time) == 73
+
+    # resample with each method
+    for name in temporal_resample_methods:
+
+        if name == 'polynomial':
+            continue
+        resampled_dataset = xarray_data_accessor.temporal_resample(
+            xarray_dataset=test_dataset,
+            resample_frequency='T',
+            resample_method=name,
+        )
+        assert len(resampled_dataset.time) == 4321
+
+    # test applying a custom function
+    resampled_dataset = xarray_data_accessor.temporal_resample(
+        xarray_dataset=test_dataset,
+        resample_frequency='T',
+        custom_resample_method=np.mean,
+    )
+    assert len(resampled_dataset.time) == 4321
+    del resampled_dataset
 
 
 def test_to_table(test_dataset, test_dir) -> None:

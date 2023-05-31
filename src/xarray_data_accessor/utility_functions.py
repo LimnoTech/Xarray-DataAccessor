@@ -24,7 +24,7 @@ from xarray_data_accessor.shared_types import (
     RasterInput,
     ShapefileInput,
     BoundingBoxDict,
-    ResampleDict,
+    SpatialResampleDict,
 )
 
 
@@ -189,7 +189,7 @@ def _unionize_bbox(
 
 def _resample_slice(
     data: xr.Dataset,
-    resample_dict: ResampleDict,
+    resample_dict: SpatialResampleDict,
 ) -> Tuple[int, xr.Dataset]:
     return (
         resample_dict['index'],

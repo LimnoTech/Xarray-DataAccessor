@@ -5,6 +5,11 @@ import pytz
 import pandas as pd
 import numpy as np
 import xarray as xr
+from xarray.core.types import (
+    DatetimeUnitOptions,
+    InterpOptions,
+    Interp1dOptions,
+)
 from pathlib import Path
 from datetime import datetime
 from rasterio.enums import Resampling
@@ -14,6 +19,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    get_args,
 )
 from xarray_data_accessor.shared_types import (
     CoordsTuple,
@@ -23,6 +29,7 @@ from xarray_data_accessor.shared_types import (
     RasterInput,
     BoundingBoxDict,
     ResolutionTuple,
+    AggregationMethods,
 )
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
@@ -259,7 +266,7 @@ def spatial_resample(
     xy_resolution_factors: Optional[ResolutionTuple] = None,
     resample_method: Optional[str] = None,
 ) -> xr.Dataset:
-    """Resamples self.xarray_dataset
+    """Spatially resamples an xarray dataset.
 
     Arguments:
         :param resolution_factor: the number of times FINER to make the
@@ -343,6 +350,65 @@ def spatial_resample(
     logging.info(f'Resampling complete: datetime={datetime.now()}')
     logging.info(f'Resampled dataset info: {xarray_dataset.dims}')
     return xarray_dataset
+
+
+def temporal_resample(
+    xarray_dataset: xr.Dataset,
+    resample_frequency: DatetimeUnitOptions,
+    resample_method: Optional[Union[InterpOptions, AggregationMethods]] = None,
+    custom_resample_method: Optional[callable] = None,
+    **kwargs,
+) -> xr.Dataset:
+    """Resamples the time dimension of an xarray dataset.
+
+    Arguments:
+        :param xarray_dataset: The xarray dataset to resample.
+        :param resample_frequency: A valid pandas/xarray resample frequency.
+        :param resample_method: A valid xarray resample method.
+            NOTE: The default is 'linear' interpolation.
+        :param custom_resample_method: A custom resample method to apply over the time axis.
+        :param kwargs: Additional keyword arguments to pass to xarray.Dataset.resample().
+            NOTE: Using resample_method='polynomial' requires kwargs:order.
+
+    Returns:
+        The resampled xarray dataset.
+    """
+
+    # verify all required inputs are present
+    if not 'time' in xarray_dataset.dims:
+        raise ValueError(
+            'The dataset must have a time dimension to resample!',
+        )
+    if resample_method == 'polynomial':
+        raise ValueError(
+            f'Polynomial interpolation is not supported!',
+        )
+    resample_obj = xarray_dataset.resample(time=resample_frequency, **kwargs)
+
+    # apply the resampling method
+    method_dict: Dict[str, bool] = {
+        'interpolate': bool(resample_method in get_args(Interp1dOptions)),
+        'aggregate': bool(resample_method in get_args(AggregationMethods)),
+        'apply': bool(custom_resample_method),
+    }
+
+    # make sure only one method is selected
+    if sum(method_dict.values()) > 1:
+        raise ValueError(
+            'Only one resampling method can be selected at a time!',
+        )
+    elif sum(method_dict.values()) == 0:
+        raise ValueError(
+            'You must select a resampling method!',
+        )
+
+    # apply the resampling
+    if method_dict['interpolate']:
+        return resample_obj.interpolate(resample_method)
+    elif method_dict['aggregate']:
+        return getattr(resample_obj, resample_method)()
+    else:
+        return resample_obj.apply(custom_resample_method)
 
 
 def get_data_tables(

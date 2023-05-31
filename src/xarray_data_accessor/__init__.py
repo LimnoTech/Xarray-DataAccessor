@@ -10,6 +10,7 @@ from xarray_data_accessor.core_functions import (
     get_xarray_dataset,
     get_bounding_box,
     spatial_resample,
+    temporal_resample,
     get_data_tables,
     subset_time_by_timezone,
     delete_temp_files,
