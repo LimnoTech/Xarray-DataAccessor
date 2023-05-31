@@ -4,34 +4,62 @@ NOTE: to see print outputs one must use the $pytest -rx$ command.
 """
 import xarray_data_accessor
 import time
+import pytest
 import xarray as xr
 from pathlib import Path
 from typing import List
 
-TEST_DATA_DIR = Path.cwd() / 'test_data'
-if not TEST_DATA_DIR.exists():
-    TEST_DATA_DIR = Path.cwd() / 'testing/test_data'
-TEST_SHP = TEST_DATA_DIR / 'LEEM_boundary.shp'
+# define fixtures
 
-CDS_VARIABLES = [
-    '2m_temperature',
-    '100m_u_component_of_wind',
-]
-AWS_VARIABLES = [
-    'air_temperature_at_2_metres',
-    'eastward_wind_at_100_metres',
-]
 
-# LATITUDE AND LONGITUDE TOLERANCE
-# NOTE: the exact max/min lat/lon can change from CDS even using the same request
-CDS_COORDS_TOLERANCE = 0.001
+@pytest.fixture
+def test_dir() -> Path:
+    """Gets the test data directory."""
+    TEST_DIR = Path.cwd() / 'testing/test_data'
+    if not TEST_DIR.exists():
+        TEST_DIR = Path.cwd() / 'test_data'
+    return TEST_DIR
+
+
+@pytest.fixture
+def bbox_shapefile(test_dir) -> Path:
+    """Gets the test shapefile."""
+    return test_dir / 'LEEM_boundary.shp'
+
+
+@pytest.fixture
+def cds_variables() -> List[str]:
+    """Gets the CDS variables."""
+    return [
+        '2m_temperature',
+        '100m_u_component_of_wind',
+    ]
+
+
+@pytest.fixture
+def cds_coords_tolerance() -> float:
+    """Gets the CDS coordinates tolerance.
+
+    NOTE: the exact max/min lat/lon can change from CDS even using the same request.
+    """
+    return 0.001
+
+
+@pytest.fixture
+def aws_variables() -> List[str]:
+    """Gets the AWS variables."""
+    return [
+        'air_temperature_at_2_metres',
+        'eastward_wind_at_100_metres',
+    ]
+
 
 # DEFINE DATA RETRIEVAL FUNCTIONS ####################################
 
-
-def cds_retrieval(
-    bbox_shapefile: Path = TEST_SHP,
-    cds_variables: List[str] = CDS_VARIABLES,
+@pytest.fixture
+def cds_era5_dataset(
+    bbox_shapefile,
+    cds_variables: List[str],
 ) -> xr.Dataset:
     return xarray_data_accessor.get_xarray_dataset(
         data_accessor_name='CDSDataAccessor',
@@ -43,9 +71,10 @@ def cds_retrieval(
     )
 
 
-def aws_retrieval(
-    bbox_shapefile: Path = TEST_SHP,
-    aws_variables: List[str] = AWS_VARIABLES,
+@pytest.fixture
+def aws_era5_dataset(
+    bbox_shapefile,
+    aws_variables: List[str],
 ) -> xr.Dataset:
     return xarray_data_accessor.get_xarray_dataset(
         data_accessor_name='AWSDataAccessor',
@@ -59,11 +88,11 @@ def aws_retrieval(
 # RUN TESTS ########################################################
 
 
-def test_bounding_box() -> None:
+def test_bounding_box(bbox_shapefile) -> None:
     """Test the bounding box."""
     # get the bounding box dictionary
     bbox = xarray_data_accessor.get_bounding_box(
-        shapefile=TEST_SHP,
+        shapefile=bbox_shapefile,
     )
 
     # assert it is as expected
@@ -75,12 +104,15 @@ def test_bounding_box() -> None:
     }
 
 
-def test_cds_dataset() -> None:
+def test_cds_dataset(
+    cds_era5_dataset,
+    cds_variables,
+    cds_coords_tolerance,
+) -> None:
     """Test the CDS dataset."""
 
     # get the data
     p1 = time.perf_counter()
-    cds_era5_dataset = cds_retrieval()
     p2 = time.perf_counter()
     print(f'cds_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
 
@@ -107,10 +139,10 @@ def test_cds_dataset() -> None:
     assert cds_era5_dataset.longitude.dtype == 'float32'
     assert abs(
         cds_era5_dataset.longitude[0].item() - float(-83.47599792480469),
-    ) < CDS_COORDS_TOLERANCE
+    ) < cds_coords_tolerance
     assert abs(
         cds_era5_dataset.longitude[-1].item() - float(-78.9749984741211),
-    ) < CDS_COORDS_TOLERANCE
+    ) < cds_coords_tolerance
 
     # check latitude dimension
     assert cds_era5_dataset.attrs['y_dim'] == 'latitude'
@@ -118,13 +150,13 @@ def test_cds_dataset() -> None:
     assert cds_era5_dataset.latitude.dtype == 'float32'
     assert abs(
         cds_era5_dataset.latitude[0].item() - float(42.882999420166016),
-    ) < CDS_COORDS_TOLERANCE
+    ) < cds_coords_tolerance
     assert abs(
         cds_era5_dataset.latitude[-1].item() - float(41.382999420166016),
-    ) < CDS_COORDS_TOLERANCE
+    ) < cds_coords_tolerance
 
     # check the variables
-    for data_var in CDS_VARIABLES:
+    for data_var in cds_variables:
         assert data_var in cds_era5_dataset.data_vars
         assert cds_era5_dataset[data_var].dtype == 'float32'
 
@@ -136,12 +168,14 @@ def test_cds_dataset() -> None:
     xarray_data_accessor.delete_temp_files()
 
 
-def test_aws_dataset() -> None:
+def test_aws_dataset(
+    aws_era5_dataset,
+    aws_variables,
+) -> None:
     """Test the AWS dataset."""
 
     # get the data
     p1 = time.perf_counter()
-    aws_era5_dataset = aws_retrieval()
     p2 = time.perf_counter()
     print(f'aws_era5_dataset retrieved in {p2 - p1:0.4f} seconds')
 
@@ -177,16 +211,10 @@ def test_aws_dataset() -> None:
     assert aws_era5_dataset.latitude[-1].item() == 41.5
 
     # check the variables
-    for data_var in AWS_VARIABLES:
+    for data_var in aws_variables:
         assert data_var in aws_era5_dataset.data_vars
         assert aws_era5_dataset[data_var].dtype == 'float32'
 
     # check the spatial reference (note WGS 84 corresponds to EPSG:4326)
     assert aws_era5_dataset.attrs['EPSG'] == 4326
     assert aws_era5_dataset.spatial_ref.attrs['geographic_crs_name'] == 'WGS 84'
-
-
-if '__main__' == __name__:
-    test_bounding_box()
-    test_cds_dataset()
-    test_aws_dataset()

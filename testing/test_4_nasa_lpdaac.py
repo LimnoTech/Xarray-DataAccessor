@@ -5,16 +5,10 @@ NOTE: to see print outputs one must use the $pytest -rx$ command.
 import xarray_data_accessor
 from xarray_data_accessor.data_accessors.nasa_from_LPDAAC import AuthorizationDict
 import os
+import pytest
 import xarray as xr
 from typing import List
 
-
-BBOX_COORDS = [
-    (14.96706, -90.01794),  # min lat, min lon
-    (15.06368, -90.01794),  # max lat, min lon
-    (14.96706, -89.93884),  # min lat, max lon
-    (15.06368, -89.93884),  # max lat, max lon
-]
 
 DATASET_NAMES = [
     'NASADEM_NC',  # NetCDF format
@@ -25,7 +19,18 @@ DATASET_NAMES = [
 # DEFINE FUNCTIONS TO ACCESS DIFFERENT DATA ####################################
 
 
-def get_authentication_dict() -> AuthorizationDict:
+@pytest.fixture
+def bbox_coords() -> List[float]:
+    return [
+        (14.96706, -90.01794),  # min lat, min lon
+        (15.06368, -90.01794),  # max lat, min lon
+        (14.96706, -89.93884),  # min lat, max lon
+        (15.06368, -89.93884),  # max lat, max lon
+    ]
+
+
+@pytest.fixture
+def earthdata_auth_dict() -> AuthorizationDict:
     """Gets the EarthData authentication dictionary from environment variables.
 
     Returns:
@@ -46,9 +51,10 @@ def get_authentication_dict() -> AuthorizationDict:
         ) from e
 
 
+@pytest.fixture
 def get_nasadem_nc(
     earthdata_auth_dict: AuthorizationDict,
-    bbox_coords: List[float] = BBOX_COORDS,
+    bbox_coords: List[float],
 ) -> xr.Dataset:
     """
     Gets NASADEM_NC data (NetCDF format) from the LPDAAC DataPool.
@@ -67,9 +73,10 @@ def get_nasadem_nc(
     )
 
 
+@pytest.fixture
 def get_glance(
     earthdata_auth_dict: AuthorizationDict,
-    bbox_coords: List[float] = BBOX_COORDS,
+    bbox_coords: List[float],
 ) -> xr.Dataset:
     """Gets GLanCE30 data (GeoTIFF format) from the LPDAAC DataPool.
 
@@ -88,11 +95,11 @@ def get_glance(
 
 # RUN TESTS ####################################################################
 
-def test_bounding_box() -> None:
+def test_bounding_box(bbox_coords) -> None:
     """Test the bounding box from a list of coordinate tuples."""
     # get the bounding box dictionary
     bbox = xarray_data_accessor.get_bounding_box(
-        coords=BBOX_COORDS,
+        coords=bbox_coords,
     )
 
     # assert it is as expected
@@ -104,13 +111,10 @@ def test_bounding_box() -> None:
     }
 
 
-def test_dem() -> None:
+def test_dem(get_nasadem_nc) -> None:
     # check that the user has added their EarthData credentials to env variables
-    EARTH_DATA_AUTH_DICT = get_authentication_dict()
 
-    dem = get_nasadem_nc(
-        earthdata_auth_dict=EARTH_DATA_AUTH_DICT,
-    )
+    dem: xr.Dataset = get_nasadem_nc
 
     # make assertions about the dataset
     assert isinstance(dem, xr.Dataset)
@@ -149,13 +153,10 @@ def test_dem() -> None:
     del dem
 
 
-def test_glance() -> None:
+def test_glance(get_glance) -> None:
     # check that the user has added their EarthData credentials to env variables
-    EARTH_DATA_AUTH_DICT = get_authentication_dict()
 
-    glance = get_glance(
-        earthdata_auth_dict=EARTH_DATA_AUTH_DICT,
-    )
+    glance: xr.Dataset = get_glance
 
     # make assertions about the dataset
     assert isinstance(glance, xr.Dataset)
@@ -184,7 +185,7 @@ def test_glance() -> None:
     # check time dimension
     assert glance.attrs['time_dim'] == 'time'
     assert len(glance.time) == 2
-    assert glance.time.dtype == 'int64'
+    assert glance.time.dtype == 'int32'
     assert glance.time[0].item() == 2018
     assert glance.time[-1].item() == 2019
 
