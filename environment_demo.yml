@@ -41,8 +41,6 @@ dependencies:
   - python-lsp-server # LSP extension for Python (pylsp), including:
   - pylsp-mypy  # MyPy type checking for Python >=3.7.
   - jupyterlab-lsp # Provides both server extension and lab extension
-  - pytest # for running our /testing suite
-  - pre-commit
 
   # Package management
   - conda
