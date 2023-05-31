@@ -1,0 +1,52 @@
+name: data_accessor_full
+channels:
+  - conda-forge
+  - pyviz
+  - nodefaults
+
+# full env includes all dependencies for viz
+dependencies:
+  - python >=3.11
+
+  # For data processing
+  - pandas
+  - xarray
+  - rioxarray
+  - dask
+  - geopandas
+
+  # For API access and data formats
+  - cdsapi
+  - fsspec
+  - s3fs
+  - cfgrib
+  - eccodes
+  - pyarrow
+  - zarr
+  - h5netcdf
+  - openpyxl
+
+  # Interactivity & Visualization (optional, but required for viz)
+  - jupyterlab
+  - ipympl
+  - nodejs
+  - cartopy
+
+  # get holoviews libs from pyviz
+  - holoviews >=1.12.0
+  - hvplot
+  - geoviews >=1.6.2 # pinned to avoid this issue: https://github.com/holoviz/geoviews/issues/334
+
+# Dev tools: Language Server Protocol (LSP) (Optional), for:
+  - python-lsp-server # LSP extension for Python (pylsp), including:
+  - pylsp-mypy  # MyPy type checking for Python >=3.7.
+  - jupyterlab-lsp # Provides both server extension and lab extension
+  - pytest # for running our /testing suite
+  - pre-commit
+
+  # Package management
+  - conda
+  - conda-build # to self install library
+  - mamba
+  - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
+  - pip

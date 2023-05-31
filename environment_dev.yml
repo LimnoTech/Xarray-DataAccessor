@@ -1,11 +1,11 @@
-name: xarray_data_accessor_env
+name: data_accessor_dev
 channels:
   - conda-forge
-  - pyviz
   - nodefaults
 
+# env includes all development dependencies
 dependencies:
-  - python >=3.10
+  - python >=3.11
 
   # For data processing
   - pandas
@@ -25,23 +25,11 @@ dependencies:
   - h5netcdf
   - openpyxl
 
-  # Interactivity & Visualization (optional, but required for viz)
-  - jupyterlab
-  - ipympl
-  - nodejs
-  - cartopy
-
-  # get holoviews libs from pyviz
-  - holoviews >=1.12.0
-  - hvplot
-  - geoviews >=1.6.2 # pinned to avoid this issue: https://github.com/holoviz/geoviews/issues/334
-
 # Dev tools: Language Server Protocol (LSP) (Optional), for:
   - python-lsp-server # LSP extension for Python (pylsp), including:
   - pylsp-mypy  # MyPy type checking for Python >=3.7.
-  - jupyterlab-lsp # Provides both server extension and lab extension
   - pytest # for running our /testing suite
-  - pre-commit
+  - pre-commit # for running our the pre-commit hooks
 
   # Package management
   - conda
