@@ -49,6 +49,10 @@ dependencies = [
     'openpyxl',
 ]
 
+[project.urls]
+homepage = "https://github.com/LimnoTech/Xarray-DataAccessor"
+repository = "https://github.com/LimnoTech/Xarray-DataAccessor"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["xarray_data_accessor*"]
