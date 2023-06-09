@@ -7,6 +7,7 @@ Each DataAccessor is registered with the DataConverterFactory.
 """
 # import all the data converters (this updates the factory class)
 from xarray_data_accessor.data_converters.to_tables import ConvertToTable
+from xarray_data_accessor.data_converters.to_gssha import ConvertToGSSHA
 
 # init the wrapper class (updates class attributes)
 from xarray_data_accessor.data_converters.factory import (

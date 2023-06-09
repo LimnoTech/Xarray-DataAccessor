@@ -41,7 +41,7 @@ class DataConversionFactory:
                 )
 
         # register the data conversion functions
-        len_i = len(cls.__conversion_functions[name].keys())
+        len_i = len(cls.__conversion_functions.keys())
         converter_functions = data_converter.get_conversion_functions()
         for name, func in converter_functions.items():
             if name in cls.__conversion_functions.keys():
@@ -56,7 +56,7 @@ class DataConversionFactory:
                 f'Registered function {name} from class {data_converter.__name__}.',
             )
 
-        if len(cls.__conversion_functions[name]) != len_i:
+        if len(cls.__conversion_functions) != len_i:
             cls.__data_converters[data_converter.__name__] = data_converter
             
             # update the data conversion functions
