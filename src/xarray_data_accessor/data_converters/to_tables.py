@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import xarray_data_accessor.utility_functions as utility_functions
 from xarray_data_accessor.data_converters.base import DataConverterBase
+from xarray_data_accessor.data_converters.factory import DataConversionFactory
 from xarray_data_accessor.shared_types import (
     CoordsTuple,
     TableInput,
@@ -18,6 +19,7 @@ from typing import (
 )
 
 
+@DataConversionFactory.register
 class ConvertToTable(DataConverterBase):
     """Contains functions to convert xarray datasets to tables."""
 
