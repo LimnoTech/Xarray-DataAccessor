@@ -1,6 +1,11 @@
 import warnings
 import pandas as pd
+import numpy as np
 import xarray as xr
+from xarray_data_accessor import utility_functions
+from xarray_data_accessor.shared_types import (
+    BoundingBoxDict,
+)
 from xarray_data_accessor.data_converters.base import (
     DataConverterBase,
 )
@@ -24,6 +29,16 @@ PrecipitationType = Literal[
     'RADAR',
     'RATES',
     'ACCUM',
+]
+
+HMETVariables = Literal[
+    'Cloud Cover',
+    'Atmospheric Pressure',
+    'Relative Humidity',
+    'Temperature',
+    'Wind Speed',
+    'Direct Radiation',
+    'Global Radiation',
 ]
 
 
@@ -196,7 +211,7 @@ class ConvertToGSSHA(DataConverterBase):
         y_dim: str = xarray_dataset.attrs['y_dim']
 
         # get coordinates
-        # TODO: figure out projection
+        # TODO: figure out projection and units
         data_df = (
             xarray_dataset[precipitation_variable]
             .to_dataframe()
@@ -261,8 +276,9 @@ class ConvertToGSSHA(DataConverterBase):
         cls,
         xarray_dataset: xr.Dataset,
         variable: str,
+        hmet_variable: Optional[HMETVariables] = None,
+        file_name_code: Optional[str] = None,
         file_dir: Optional[Union[str, Path]] = None,
-        file_name: Optional[str] = None,
         file_suffix: Optional[str] = None,
     ) -> Path:
         """Creates a GRASS ASCII input file from an xarray dataset.
@@ -286,6 +302,31 @@ class ConvertToGSSHA(DataConverterBase):
             file_name=file_name,
             file_suffix=file_suffix,
         )
+
+        # TODO: make this work over time https://www.gsshawiki.com/Continuous:Hydrometeorological_Data
+        # make header
+        ascii_text: str = ''
+        bbox: BoundingBoxDict = utility_functions._bbox_from_raster(
+            raster=xarray_dataset,
+        )
+        for direction in ['north', 'south', 'east', 'west']:
+            ascii_text += f'{direction}: {bbox[direction]}\n'
+        ascii_text += f'rows: {len(xarray_dataset.dims[xarray_dataset.attrs["y_dim"]].values)}\n'
+        ascii_text += f'rows: {len(xarray_dataset.dims[xarray_dataset.attrs["x_dim"]].values)}\n'
+
+        # get the data as a string
+        data_str = (
+            np.array2string(
+                xarray_dataset[variable].values,
+                formatter={'float': lambda x: str(x)},
+                separator=' ',
+            )
+            .replace('  ', '')
+            .replace('[', '')
+            .replace(']', '')
+        )
+
+        ascii_text += data_str
 
         # write the ASCII file
         cls._write_ascii_file(
