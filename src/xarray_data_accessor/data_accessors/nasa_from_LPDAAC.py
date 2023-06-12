@@ -37,7 +37,7 @@ from xarray_data_accessor.data_accessors.shared_functions import (
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
-from xarray_data_accessor.data_accessors.nasa_info import (
+from xarray_data_accessor.info.nasa import (
     LPDAAC_VARIABLES,
     LPDAAC_TIME_DIMS,
     LPDAAC_XY_DIMS,

@@ -36,7 +36,7 @@ from xarray_data_accessor.data_accessors.base import (
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorProduct,
 )
-from xarray_data_accessor.data_accessors.era5_from_cds_info import (
+from xarray_data_accessor.info.era5 import (
     SINGLE_LEVEL_VARIABLES,
     MISSING_MONTHLY_VARIABLES,
     MISSING_HOURLY_VARIABLES,
