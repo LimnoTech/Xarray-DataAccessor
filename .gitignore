@@ -13,6 +13,7 @@ examples/example_data/*.tif.ovr
 testing/test_data/*.csv
 testing/test_data/*.parquet
 testing/test_data/*.xlsx
+*.asc
 dev_sandbox/**
 lake_erie_data/elements_data/**
 lake_erie_data/nodes_data/**
