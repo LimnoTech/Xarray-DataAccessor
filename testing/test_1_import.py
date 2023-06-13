@@ -19,7 +19,6 @@ def test_name_space():
         'get_bounding_box',
         'spatial_resample',
         'temporal_resample',
-        'get_data_tables',
         'subset_time_by_timezone',
         'delete_temp_files',
     ]
@@ -66,3 +65,25 @@ def test_dataset_variables():
             )
             assert isinstance(supported_variables, list)
             assert len(supported_variables) > 0
+
+
+def test_data_conversion_functions() -> None:
+
+    # check conversion functions class and default functions
+    assert 'DataConversionFunctions' in dir(xarray_data_accessor)
+    from xarray_data_accessor import DataConversionFunctions
+
+    assert isinstance(DataConversionFunctions, type)
+    assert 'points_to_tables' in dir(DataConversionFunctions)
+
+    # check the factory
+    assert 'DataConversionFactory' in dir(xarray_data_accessor)
+    from xarray_data_accessor import DataConversionFactory
+
+    assert DataConversionFunctions.get_factory()
+    factory = DataConversionFunctions.get_factory()
+
+    assert isinstance(factory.get_functions(), dict)
+    for name, func in factory.get_functions().items():
+        assert isinstance(name, str)
+        assert callable(func)
