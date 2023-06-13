@@ -202,7 +202,7 @@ class CDSDataAccessor(DataAccessorBase):
                 if not variable in self.dataset_variables()[self.dataset_name]:
                     warnings.warn(
                         message=(
-                            f'Variable={variable} cannot be found for AWS'
+                            f'Variable={variable} cannot be found for CDS'
                         ),
                     )
                     continue

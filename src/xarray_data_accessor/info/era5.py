@@ -66,7 +66,6 @@ SINGLE_LEVEL_VARIABLES = [
     '10m_v_component_of_neutral_wind',
     '10m_v_component_of_wind',
     '10m_wind_gust_since_previous_post_processing',
-    '10m_wind_speed',
     '2m_dewpoint_temperature',
     '2m_temperature',
     'air_density_over_the_oceans',
