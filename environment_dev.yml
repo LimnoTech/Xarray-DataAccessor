@@ -24,6 +24,7 @@ dependencies:
   - zarr
   - h5netcdf
   - openpyxl
+  - metpy
 
   # Dev tools: Language Server Protocol (LSP) (Optional), for:
   - python-lsp-server # LSP extension for Python (pylsp), including:

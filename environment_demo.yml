@@ -25,6 +25,7 @@ dependencies:
   - zarr
   - h5netcdf
   - openpyxl
+  - metpy
 
   # Interactivity & Visualization (optional, but required for viz)
   - jupyterlab
