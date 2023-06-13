@@ -2,6 +2,7 @@ import logging
 from xarray_data_accessor.data_converters.base import DataConverterBase
 from typing import (
     Dict,
+    List,
 )
 
 
@@ -84,6 +85,13 @@ class DataConversionFactory:
         return cls.__conversion_functions
 
     @classmethod
+    def get_function_provenance(
+        cls,
+    ) -> Dict[str, DataConverterBase]:
+        """Returns a dictionary of conversion function provenance."""
+        return cls.__conversion_function_provenance
+
+    @classmethod
     def get_converter_classes(
         cls,
     ) -> Dict[str, DataConverterBase]:
@@ -94,6 +102,7 @@ class DataConversionFunctions:
     """A class for accessing data conversion functions."""
 
     __data_conversion_factory = DataConversionFactory
+    __added_functions: List[str] = []
 
     @classmethod
     def get_factory(cls) -> DataConversionFactory:
@@ -101,8 +110,14 @@ class DataConversionFunctions:
         return cls.__data_conversion_factory
 
     @classmethod
+    def get_function_names(cls) -> List[str]:
+        """Returns a list of the added functions."""
+        return cls.__added_functions
+
+    @classmethod
     def add_functions(cls):
         # add the data conversion functions
         for name, func in cls.__data_conversion_factory.get_functions().items():
             if name not in cls.__dict__.keys():
                 setattr(cls, name, func)
+                cls.__added_functions.append(name)
