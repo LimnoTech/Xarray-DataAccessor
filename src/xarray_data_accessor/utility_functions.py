@@ -33,6 +33,9 @@ def _get_datetime(input_date: TimeInput) -> datetime:
     if isinstance(input_date, datetime):
         return input_date
 
+    elif isinstance(input_date, np.datetime64) or isinstance(input_date, str):
+        return pd.to_datetime(input_date)
+
     # assume int is a year
     elif isinstance(input_date, int):
         if input_date not in list(range(1950, datetime.now().year + 1)):
@@ -41,8 +44,6 @@ def _get_datetime(input_date: TimeInput) -> datetime:
             )
         return pd.to_datetime(f'{input_date}-01-01')
 
-    elif isinstance(input_date, str):
-        return pd.to_datetime(input_date)
     else:
         raise ValueError(
             f'start/end date input={input_date} is invalid.',

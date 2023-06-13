@@ -3,6 +3,7 @@ import numpy as np
 from typing import (
     Literal,
     Dict,
+    Set,
 )
 
 PrecipitationType = Literal[
@@ -12,8 +13,17 @@ PrecipitationType = Literal[
     'ACCUM',
 ]
 
+HMETAggregationFunctions = Literal[
+    'mean',
+    'sum',
+    'max',
+    'min',
+    'std',
+    'median',
+]
 
-@dataclasses.dataclass
+
+@ dataclasses.dataclass
 class HMETVariableInfo:
     units: str
     ascii_file_name: str

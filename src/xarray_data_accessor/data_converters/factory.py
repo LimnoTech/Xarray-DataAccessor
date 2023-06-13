@@ -10,7 +10,7 @@ class DataConversionFactory:
 
     Protected Attributes:
         __data_converters: A dictionary of names : registered data converters.
-        __conversion_function_provenance: Associated conversion function names 
+        __conversion_function_provenance: Associated conversion function names
             with the data converter that registered them.
         __conversion_functions: A dictionary of names : conversion functions.
     """
@@ -58,7 +58,7 @@ class DataConversionFactory:
 
         if len(cls.__conversion_functions) != len_i:
             cls.__data_converters[data_converter.__name__] = data_converter
-            
+
             # update the data conversion functions
             DataConversionFunctions.add_functions()
 
@@ -75,30 +75,34 @@ class DataConversionFactory:
                 f'{data_converter.__name__} is not registered with the '
                 f'DataConversionFactory.',
             )
-        
+
     @classmethod
     def get_functions(
         cls,
     ) -> Dict[str, DataConverterBase.ConversionFunctionType]:
         """Returns a dictionary of conversion functions."""
         return cls.__conversion_functions
-    
+
     @classmethod
     def get_converter_classes(
         cls,
     ) -> Dict[str, DataConverterBase]:
         return cls.__data_converters
 
+
 class DataConversionFunctions:
     """A class for accessing data conversion functions."""
-    
+
     __data_conversion_factory = DataConversionFactory
 
     @classmethod
-    def add_functions(cls):    
+    def get_factory(cls) -> DataConversionFactory:
+        """Returns the factory."""
+        return cls.__data_conversion_factory
+
+    @classmethod
+    def add_functions(cls):
         # add the data conversion functions
         for name, func in cls.__data_conversion_factory.get_functions().items():
             if name not in cls.__dict__.keys():
                 setattr(cls, name, func)
-
-    
