@@ -28,7 +28,8 @@ def test_factory() -> None:
     """Make sure the function was correctly registered."""
     assert 'ConvertToGSSHA' in xda.DataConversionFactory.get_converter_classes().keys()
     gssha_obj = xda.DataConversionFactory.get_converter_classes()[
-        'ConvertToGSSHA']
+        'ConvertToGSSHA'
+    ]
     assert isinstance(gssha_obj, object)
     assert issubclass(
         gssha_obj,
