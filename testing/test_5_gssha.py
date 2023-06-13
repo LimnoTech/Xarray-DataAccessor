@@ -43,6 +43,7 @@ def test_precipitation_input(test_dataset) -> None:
     out_path = xda.DataConversionFunctions.make_gssha_precipitation_input(
         test_dataset,
         precipitation_variable='2m_temperature',
+        output_epsg=26915,
     )
 
     assert out_path.exists()

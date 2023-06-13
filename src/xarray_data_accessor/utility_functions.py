@@ -221,12 +221,40 @@ def _coords_in_bbox(
     return False
 
 
+def _convert_xy_coordinates(
+    x: np.ndarray,
+    y: np.ndarray,
+    input_epsg: Optional[int] = None,
+    output_epsg: Optional[int] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Transforms coordinates from one EPSG to another."""
+
+    if not input_epsg and output_epsg:
+        raise ValueError(
+            'An input EPSG must be provided if an output EPSG is provided! '
+            'This is pulled from xarray_dataset.attrs["EPSG"]. '
+            'Please set this attribute to a valid integer EPSG code.',
+        )
+    if output_epsg and output_epsg != input_epsg:
+        # Create a pyproj Transformer for the coordinate conversion
+        transformer = pyproj.Transformer.from_crs(
+            input_epsg,
+            output_epsg,
+            always_xy=True,
+        )
+
+        # Perform the coordinate conversion
+        x, y = transformer.transform(x, y)
+    return x, y
+
+
 def _convert_bbox(
     bbox: BoundingBoxDict,
     known_epsg: int,
 ) -> BoundingBoxDict:
     """Converts bbox coordinates to a different EPSG."""
 
+    # TODO: consider deprecating this method
     # EPSG:4326 bbox list
     bbox_list_in = [
         bbox['west'],

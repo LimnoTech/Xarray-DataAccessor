@@ -1,5 +1,6 @@
 import warnings
 import logging
+import pyproj
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -118,8 +119,10 @@ class ConvertToGSSHA(DataConverterBase):
 
     @ staticmethod
     def _write_precip_coords(
-        easting: pd.Series,
-        northing: pd.Series,
+        easting: np.ndarray,
+        northing: np.ndarray,
+        input_epsg: Optional[int] = None,
+        output_epsg: Optional[int] = None,
     ) -> str:
         """Writes the coordinate lines of a precipitation ASCII file.
 
@@ -136,8 +139,17 @@ class ConvertToGSSHA(DataConverterBase):
                 COORD 204555.0  4751268.0 "Center of precipitation pixel #1"
                 COORD 205642.0  4750491.0 "Center of precipitation pixel #2"
         """
+        # reproject if necessary
+        if output_epsg:
+            easting, northing = utility_functions._convert_xy_coordinates(
+                x=easting,
+                y=northing,
+                input_epsg=input_epsg,
+                output_epsg=output_epsg,
+            )
+
         # zip the coordinates
-        coordinates = zip(easting.to_list(), northing.to_list())
+        coordinates = zip(easting.tolist(), northing.tolist())
 
         # get the number of "gages"
         num_gages = len(easting)
@@ -238,6 +250,7 @@ class ConvertToGSSHA(DataConverterBase):
         precipitation_variable: str,
         precipitation_type: Optional[PrecipitationType] = None,
         event_intervals: Optional[List[EventIntervals]] = None,
+        output_epsg: Optional[int] = None,
         file_dir: Optional[Union[str, Path]] = None,
         file_name: Optional[str] = None,
         file_suffix: Optional[str] = None,
@@ -296,8 +309,10 @@ class ConvertToGSSHA(DataConverterBase):
         )
         ts1: datetime = data_df['time'].unique()[0]
         coordinates_header: str = cls._write_precip_coords(
-            easting=data_df.loc[data_df.time == ts1, x_dim],
-            northing=data_df.loc[data_df.time == ts1, y_dim],
+            easting=data_df.loc[data_df.time == ts1, x_dim].to_numpy(),
+            northing=data_df.loc[data_df.time == ts1, y_dim].to_numpy(),
+            input_epsg=xarray_dataset.attrs.get('EPSG', None),
+            output_epsg=output_epsg,
         )
 
         # get events
@@ -353,6 +368,7 @@ class ConvertToGSSHA(DataConverterBase):
         hmet_variable: Optional[str] = None,
         start_time: Optional[TimeInput] = None,
         end_time: Optional[TimeInput] = None,
+        output_epsg: Optional[int] = None,
         file_dir: Optional[Union[str, Path]] = None,
         file_name: Optional[str] = None,
         file_suffix: Optional[str] = None,
@@ -402,11 +418,20 @@ class ConvertToGSSHA(DataConverterBase):
         x_dim = xarray_dataset.attrs['x_dim']
         y_dim = xarray_dataset.attrs['y_dim']
 
+        # get easting and northing coordinate arrays (reproject if necessary)
+        easting, northing = utility_functions._convert_xy_coordinates(
+            x=xarray_dataset[x_dim].values,
+            y=xarray_dataset[y_dim].values,
+            input_epsg=xarray_dataset.attrs.get('EPSG', None),
+            output_epsg=output_epsg,
+        )
+
+        # make bounding box for header
         bbox = BoundingBoxDict(
-            north=np.max(xarray_dataset[y_dim].values),
-            south=np.min(xarray_dataset[y_dim].values),
-            east=np.max(xarray_dataset[x_dim].values),
-            west=np.min(xarray_dataset[x_dim].values),
+            north=np.max(northing),
+            south=np.min(northing),
+            east=np.max(easting),
+            west=np.min(easting),
         )
 
         for direction in ['north', 'south', 'east', 'west']:
@@ -482,6 +507,8 @@ class ConvertToGSSHA(DataConverterBase):
             file_suffix: The file suffix to use.
             how: The method to use to aggregate the data at each time step.
                 Options include: 'mean', 'median', 'min', 'max', 'sum'.
+            xy_coords: The x and y coordinate names to use for aggregation.
+                Note that this must be in the same units as the xarray dataset.
 
         Returns:
             The path of the output WES ASCII file.
