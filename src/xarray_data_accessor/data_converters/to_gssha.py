@@ -189,8 +189,11 @@ class ConvertToGSSHA(DataConverterBase):
 
         # trim to time range if necessary
         if start_time or end_time:
-            start_dt = utility_functions._get_datetime(start_time)
-            end_dt = utility_functions._get_datetime(end_time)
+            start_dt, end_dt = (None, None)
+            if start_time:
+                start_dt = utility_functions._get_datetime(start_time)
+            if end_time:
+                end_dt = utility_functions._get_datetime(end_time)
             xarray_dataset = xarray_dataset.sel(
                 time=slice(start_dt, end_dt),
             ).copy()
