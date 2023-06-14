@@ -37,7 +37,6 @@ dependencies = [
     'xarray',
     'rioxarray',
     'dask',
-    dask[distributed],
     'geopandas',
     'cdsapi',
     'fsspec',
