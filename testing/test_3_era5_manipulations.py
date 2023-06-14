@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import xarray_data_accessor
 from xarray_data_accessor import (
-    DataConversionFunctions,
+    ConvertToTable,
 )
 import pytest
 from rasterio.enums import Resampling
@@ -135,7 +135,7 @@ def test_to_table(test_dataset, test_dir) -> None:
         '.xlsx': pd.read_excel,
     }
     for suffix, func in suffix_dict.items():
-        tables_dict = DataConversionFunctions.points_to_tables(
+        tables_dict = ConvertToTable.points_to_tables(
             xarray_dataset=test_dataset,
             variables=None,
             # lon/lat coords, not perfectly aligned with grid

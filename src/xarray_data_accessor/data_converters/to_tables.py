@@ -3,8 +3,6 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import xarray_data_accessor.utility_functions as utility_functions
-from xarray_data_accessor.data_converters.base import DataConverterBase
-from xarray_data_accessor.data_converters.factory import DataConversionFactory
 from xarray_data_accessor.shared_types import (
     CoordsTuple,
     TableInput,
@@ -19,8 +17,7 @@ from typing import (
 )
 
 
-@DataConversionFactory.register
-class ConvertToTable(DataConverterBase):
+class ConvertToTable:
     """Contains functions to convert xarray datasets to tables."""
 
     @staticmethod
@@ -131,12 +128,3 @@ class ConvertToTable(DataConverterBase):
                 save_table_prefix=save_table_prefix,
             )
         return out_dict
-
-    @classmethod
-    def get_conversion_functions(
-        cls,
-    ) -> Dict[str, DataConverterBase.ConversionFunctionType]:
-        """Returns a dictionary of conversion functions."""
-        return {
-            cls.points_to_tables.__name__: cls.points_to_tables,
-        }

@@ -1,5 +1,5 @@
 """Tests conversion to GSSHA format."""
-import xarray_data_accessor as xda
+from xarray_data_accessor.data_converters import ConvertToGSSHA
 import xarray as xr
 import pytest
 from pathlib import Path
@@ -30,23 +30,8 @@ def count_lines(filename: Path):
     return len(lines)
 
 
-def test_factory() -> None:
-    """Make sure the function was correctly registered."""
-    assert 'ConvertToGSSHA' in xda.DataConversionFactory.get_converter_classes().keys()
-    gssha_obj = xda.DataConversionFactory.get_converter_classes()[
-        'ConvertToGSSHA'
-    ]
-    assert isinstance(gssha_obj, object)
-    assert issubclass(
-        gssha_obj,
-        xda.data_converters.base.DataConverterBase,
-    )
-    for func_name in gssha_obj.get_conversion_functions().keys():
-        assert func_name in dir(xda.DataConversionFunctions)
-
-
 def test_precipitation_input(test_dataset) -> None:
-    out_path = xda.DataConversionFunctions.make_gssha_precipitation_input(
+    out_path = ConvertToGSSHA.make_gssha_precipitation_input(
         test_dataset,
         precipitation_variable='2m_temperature',
         precipitation_type='GAGE',
@@ -58,7 +43,7 @@ def test_precipitation_input(test_dataset) -> None:
     l1 = count_lines(out_path)
 
     # test the hot start
-    out_path = xda.DataConversionFunctions.make_gssha_precipitation_input(
+    out_path = ConvertToGSSHA.make_gssha_precipitation_input(
         test_dataset,
         precipitation_variable='2m_temperature',
         precipitation_type='GAGE',
@@ -73,7 +58,7 @@ def test_precipitation_input(test_dataset) -> None:
 def test_to_grass_ascii(test_dataset) -> None:
 
     # test with correct HMET variable
-    out_list = xda.DataConversionFunctions.make_gssha_grass_ascii(
+    out_list = ConvertToGSSHA.make_gssha_grass_ascii(
         test_dataset,
         variable='2m_temperature',
         hmet_variable='Dry Bulb Temperature',
@@ -92,7 +77,7 @@ def test_to_grass_ascii(test_dataset) -> None:
 
 def test_hmet_wes_ascii(test_dataset) -> None:
 
-    out_path = xda.DataConversionFunctions.make_gssha_hmet_wes(
+    out_path = ConvertToGSSHA.make_gssha_hmet_wes(
         test_dataset,
         variable_to_hmet={'2m_temperature': 'Dry Bulb Temperature'},
         start_time=test_dataset.time.values[0],

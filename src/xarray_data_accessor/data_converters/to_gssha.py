@@ -8,12 +8,6 @@ from xarray_data_accessor.shared_types import (
     BoundingBoxDict,
     TimeInput,
 )
-from xarray_data_accessor.data_converters.base import (
-    DataConverterBase,
-)
-from xarray_data_accessor.data_converters.factory import (
-    DataConversionFactory,
-)
 from xarray_data_accessor.info.gssha import (
     PrecipitationType,
     HMETAggregationFunctions,
@@ -43,215 +37,212 @@ class EventIntervals(TypedDict):
     end: datetime
 
 
-@DataConversionFactory.register
-class ConvertToGSSHA(DataConverterBase):
+def _get_file_path(
+    file_dir: Optional[Union[str, Path]] = None,
+    file_name: Optional[str] = None,
+    file_suffix: Optional[str] = None,
+) -> Path:
+    """Generate a valid output file path."""
+
+    # make sure the file directory exists
+    if not file_dir:
+        file_dir = Path.cwd()
+    else:
+        file_dir = Path(file_dir)
+    if not file_dir.exists():
+        raise FileNotFoundError(
+            f'File directory {file_dir} does not exist!',
+        )
+
+    # make sure the file name is valid
+    if not file_name:
+        file_name = 'gssha_input'
+        logging.warning(
+            f'No file name was provided! Using default file name {file_name}.',
+        )
+    if not isinstance(file_name, str):
+        raise TypeError(
+            f'param:file_name must be a string! Not {type(file_name)}.',
+        )
+
+    # get the file suffix
+    if '.asc' in file_name:
+        file_name = file_name.replace('.asc', '')
+    if not file_suffix:
+        file_suffix = '.asc'
+    if not isinstance(file_suffix, str):
+        raise TypeError(
+            f'param:file_suffix must be a string! Not {type(file_suffix)}.',
+        )
+    if not file_suffix.startswith('.'):
+        file_suffix = f'.{file_suffix}'
+
+    # return the file path
+    return Path(file_dir / f'{file_name}{file_suffix}')
+
+
+def _write_ascii_file(
+    text_content: str,
+    file_path: Path,
+    hot_start: Optional[bool] = False,
+) -> None:
+    """Writes the text content to the file path."""
+
+    with open(
+        file_path,
+        OPEN_MODES[hot_start],
+        encoding='ascii',
+    ) as file:
+        file.write(text_content)
+
+    # validate the ASCII file
+    if not file_path.exists():
+        raise FileNotFoundError(f'File {file_path} was not created!')
+
+    with open(
+        file_path,
+        'r',
+        encoding='ascii',
+        errors='ignore',
+    ) as file:
+        try:
+            file.read().encode('ascii')
+        except UnicodeDecodeError:
+            raise UnicodeDecodeError(
+                f'Something went wrong - File {file_path} is not a valid ASCII file.',
+            )
+
+
+def _write_precip_coords(
+    easting: np.ndarray,
+    northing: np.ndarray,
+    input_epsg: Optional[int] = None,
+    output_epsg: Optional[int] = None,
+) -> str:
+    """Writes the coordinate lines of a precipitation ASCII file.
+
+    NOTE: This function assumes that the easting and northing coordinates
+    are in the same projection and correspond to the same time step!
+
+    Arguments:
+        easting: A pandas series of easting coordinates.
+        northing: A pandas series of northing coordinates.
+
+    Returns: A string of the precipitation coordinates in ASCII format.
+        Output format:
+            NRGAG 2
+            COORD 204555.0  4751268.0 "Center of precipitation pixel #1"
+            COORD 205642.0  4750491.0 "Center of precipitation pixel #2"
+    """
+    # reproject if necessary
+    if output_epsg:
+        easting, northing = utility_functions._convert_xy_coordinates(
+            x=easting,
+            y=northing,
+            input_epsg=input_epsg,
+            output_epsg=output_epsg,
+        )
+
+    # zip the coordinates
+    coordinates = zip(easting.tolist(), northing.tolist())
+
+    # get the number of "gages"
+    num_gages = len(easting)
+
+    output = f'NRGAG {num_gages}\n'
+    for i, (easting, northing) in enumerate(coordinates):
+        output += f'COORD {easting} {northing} "Center of precipitation pixel #{i+1}"\n'
+    return output
+
+
+def _prepare_dataset(
+    xarray_dataset: xr.Dataset,
+    variables: List[str],
+    variable_to_hmet: Optional[Dict[str, str]] = None,
+    start_time: Optional[TimeInput] = None,
+    end_time: Optional[TimeInput] = None,
+) -> xr.Dataset:
+
+    # make sure the input variables are appropriate
+    if not variable_to_hmet:
+        warnings.warn(
+            'No variable to HMET variable mapping was provided. '
+            'This prevents GSSHA formatted file names and nodata values.',
+        )
+        variable_to_hmet = {}
+
+    non_hmet = []
+    for ds_var in variables:
+        if not ds_var in xarray_dataset:
+            raise KeyError(
+                f'Variable {ds_var} not found in xarray dataset!',
+            )
+        if ds_var in variable_to_hmet.keys():
+            if (
+                variable_to_hmet[ds_var] not in HMETVariables.keys()
+                and variable_to_hmet[ds_var]
+            ):
+                non_hmet.append(ds_var)
+
+    if len(non_hmet) > 0:
+        raise warnings.warn(
+            f'Variables to HMET variables dict input contains non-HMET '
+            f'variable names. '
+            f'The following Non-HMET Variables inputs were detected: {non_hmet}. '
+            f'Nodata values will be assumed by dtype. '
+            f'HMET Variables include {HMETVariables.keys()}',
+        )
+
+    # trim to time range if necessary
+    if start_time or end_time:
+        start_dt, end_dt = (None, None)
+        if start_time:
+            start_dt = utility_functions._get_datetime(start_time)
+        if end_time:
+            end_dt = utility_functions._get_datetime(end_time)
+        xarray_dataset = xarray_dataset.sel(
+            time=slice(start_dt, end_dt),
+        ).copy()
+
+    # prepare nodata
+    xarray_dataset = _prep_nodata(
+        xarray_dataset,
+        variables=variables,
+        variable_to_hmet=variable_to_hmet,
+    )
+    return xarray_dataset
+
+
+def _prep_nodata(
+    xarray_dataset: xr.Dataset,
+    variables: List[str],
+    variable_to_hmet: Optional[Dict[str, str]] = None,
+) -> xr.Dataset:
+    """Prepares a dataset for WES format."""
+    for variable in variables:
+        try:
+            nodata_value = HMETVariables[variable_to_hmet[variable]].nodata_value
+        except KeyError:
+            if 'int' in str(xarray_dataset[variable].dtype):
+                nodata_value = 999
+            if not 'float' in str(xarray_dataset[variable].dtype):
+                warnings.warn(
+                    f'Variable {variable} is not an int or float. '
+                    f'Assuming nodata value of 99.999.',
+                )
+            nodata_value = 99.999
+
+        xarray_dataset[variable] = xarray_dataset[variable].fillna(
+            nodata_value,
+        )
+    return xarray_dataset
+
+
+class ConvertToGSSHA:
     """Converts xarray datasets to GSSHA input files."""
 
     @staticmethod
-    def _get_file_path(
-        file_dir: Optional[Union[str, Path]] = None,
-        file_name: Optional[str] = None,
-        file_suffix: Optional[str] = None,
-    ) -> Path:
-        """Generate a valid output file path."""
-
-        # make sure the file directory exists
-        if not file_dir:
-            file_dir = Path.cwd()
-        else:
-            file_dir = Path(file_dir)
-        if not file_dir.exists():
-            raise FileNotFoundError(
-                f'File directory {file_dir} does not exist!',
-            )
-
-        # make sure the file name is valid
-        if not file_name:
-            file_name = 'gssha_input'
-            logging.warning(
-                f'No file name was provided! Using default file name {file_name}.',
-            )
-        if not isinstance(file_name, str):
-            raise TypeError(
-                f'param:file_name must be a string! Not {type(file_name)}.',
-            )
-
-        # get the file suffix
-        if '.asc' in file_name:
-            file_name = file_name.replace('.asc', '')
-        if not file_suffix:
-            file_suffix = '.asc'
-        if not isinstance(file_suffix, str):
-            raise TypeError(
-                f'param:file_suffix must be a string! Not {type(file_suffix)}.',
-            )
-        if not file_suffix.startswith('.'):
-            file_suffix = f'.{file_suffix}'
-
-        # return the file path
-        return Path(file_dir / f'{file_name}{file_suffix}')
-
-    @staticmethod
-    def _write_ascii_file(
-        text_content: str,
-        file_path: Path,
-        hot_start: Optional[bool] = False,
-    ) -> None:
-        """Writes the text content to the file path."""
-
-        with open(
-            file_path,
-            OPEN_MODES[hot_start],
-            encoding='ascii',
-        ) as file:
-            file.write(text_content)
-
-        # validate the ASCII file
-        if not file_path.exists():
-            raise FileNotFoundError(f'File {file_path} was not created!')
-
-        with open(
-            file_path,
-            'r',
-            encoding='ascii',
-            errors='ignore',
-        ) as file:
-            try:
-                file.read().encode('ascii')
-            except UnicodeDecodeError:
-                raise UnicodeDecodeError(
-                    f'Something went wrong - File {file_path} is not a valid ASCII file.',
-                )
-
-    @staticmethod
-    def _write_precip_coords(
-        easting: np.ndarray,
-        northing: np.ndarray,
-        input_epsg: Optional[int] = None,
-        output_epsg: Optional[int] = None,
-    ) -> str:
-        """Writes the coordinate lines of a precipitation ASCII file.
-
-        NOTE: This function assumes that the easting and northing coordinates
-        are in the same projection and correspond to the same time step!
-
-        Arguments:
-            easting: A pandas series of easting coordinates.
-            northing: A pandas series of northing coordinates.
-
-        Returns: A string of the precipitation coordinates in ASCII format.
-            Output format:
-                NRGAG 2
-                COORD 204555.0  4751268.0 "Center of precipitation pixel #1"
-                COORD 205642.0  4750491.0 "Center of precipitation pixel #2"
-        """
-        # reproject if necessary
-        if output_epsg:
-            easting, northing = utility_functions._convert_xy_coordinates(
-                x=easting,
-                y=northing,
-                input_epsg=input_epsg,
-                output_epsg=output_epsg,
-            )
-
-        # zip the coordinates
-        coordinates = zip(easting.tolist(), northing.tolist())
-
-        # get the number of "gages"
-        num_gages = len(easting)
-
-        output = f'NRGAG {num_gages}\n'
-        for i, (easting, northing) in enumerate(coordinates):
-            output += f'COORD {easting} {northing} "Center of precipitation pixel #{i+1}"\n'
-        return output
-
-    @classmethod
-    def _prepare_dataset(
-        cls,
-        xarray_dataset: xr.Dataset,
-        variables: List[str],
-        variable_to_hmet: Optional[Dict[str, str]] = None,
-        start_time: Optional[TimeInput] = None,
-        end_time: Optional[TimeInput] = None,
-    ) -> xr.Dataset:
-
-        # make sure the input variables are appropriate
-        if not variable_to_hmet:
-            warnings.warn(
-                'No variable to HMET variable mapping was provided. '
-                'This prevents GSSHA formatted file names and nodata values.',
-            )
-            variable_to_hmet = {}
-
-        non_hmet = []
-        for ds_var in variables:
-            if not ds_var in xarray_dataset:
-                raise KeyError(
-                    f'Variable {ds_var} not found in xarray dataset!',
-                )
-            if ds_var in variable_to_hmet.keys():
-                if (
-                    variable_to_hmet[ds_var] not in HMETVariables.keys()
-                    and variable_to_hmet[ds_var]
-                ):
-                    non_hmet.append(ds_var)
-
-        if len(non_hmet) > 0:
-            raise warnings.warn(
-                f'Variables to HMET variables dict input contains non-HMET '
-                f'variable names. '
-                f'The following Non-HMET Variables inputs were detected: {non_hmet}. '
-                f'Nodata values will be assumed by dtype. '
-                f'HMET Variables include {HMETVariables.keys()}',
-            )
-
-        # trim to time range if necessary
-        if start_time or end_time:
-            start_dt, end_dt = (None, None)
-            if start_time:
-                start_dt = utility_functions._get_datetime(start_time)
-            if end_time:
-                end_dt = utility_functions._get_datetime(end_time)
-            xarray_dataset = xarray_dataset.sel(
-                time=slice(start_dt, end_dt),
-            ).copy()
-
-        # prepare nodata
-        xarray_dataset = cls._prep_nodata(
-            xarray_dataset,
-            variables=variables,
-            variable_to_hmet=variable_to_hmet,
-        )
-        return xarray_dataset
-
-    @staticmethod
-    def _prep_nodata(
-        xarray_dataset: xr.Dataset,
-        variables: List[str],
-        variable_to_hmet: Optional[Dict[str, str]] = None,
-    ) -> xr.Dataset:
-        """Prepares a dataset for WES format."""
-        for variable in variables:
-            try:
-                nodata_value = HMETVariables[variable_to_hmet[variable]].nodata_value
-            except KeyError:
-                if 'int' in str(xarray_dataset[variable].dtype):
-                    nodata_value = 999
-                if not 'float' in str(xarray_dataset[variable].dtype):
-                    warnings.warn(
-                        f'Variable {variable} is not an int or float. '
-                        f'Assuming nodata value of 99.999.',
-                    )
-                nodata_value = 99.999
-
-            xarray_dataset[variable] = xarray_dataset[variable].fillna(
-                nodata_value,
-            )
-        return xarray_dataset
-
-    @classmethod
     def make_gssha_precipitation_input(
-        cls,
         xarray_dataset: xr.Dataset,
         precipitation_variable: str,
         precipitation_type: Optional[PrecipitationType] = None,
@@ -285,7 +276,7 @@ class ConvertToGSSHA(DataConverterBase):
         # get a file path
         if not file_suffix:
             file_suffix = '.gag'
-        file_path: Path = cls._get_file_path(
+        file_path: Path = _get_file_path(
             file_dir=file_dir,
             file_name=file_name,
             file_suffix=file_suffix,
@@ -317,7 +308,7 @@ class ConvertToGSSHA(DataConverterBase):
             )
         )
         ts1: datetime = data_df['time'].unique()[0]
-        coordinates_header: str = cls._write_precip_coords(
+        coordinates_header: str = _write_precip_coords(
             easting=data_df.loc[data_df.time == ts1, x_dim].to_numpy(),
             northing=data_df.loc[data_df.time == ts1, y_dim].to_numpy(),
             input_epsg=xarray_dataset.attrs.get('EPSG', None),
@@ -362,7 +353,7 @@ class ConvertToGSSHA(DataConverterBase):
         del event_strings
 
         # write the ASCII file
-        cls._write_ascii_file(
+        _write_ascii_file(
             text_content=ascii_text,
             file_path=file_path,
             hot_start=hot_start,
@@ -370,9 +361,8 @@ class ConvertToGSSHA(DataConverterBase):
         logging.info(f'Precipitation ASCII file saved @ {file_path}.')
         return file_path
 
-    @classmethod
+    @staticmethod
     def make_gssha_grass_ascii(
-        cls,
         xarray_dataset: xr.Dataset,
         variable: str,
         hmet_variable: Optional[str] = None,
@@ -408,7 +398,7 @@ class ConvertToGSSHA(DataConverterBase):
         """
 
         # prepare the dataset
-        xarray_dataset = cls._prepare_dataset(
+        xarray_dataset = _prepare_dataset(
             xarray_dataset=xarray_dataset,
             variables=[variable],
             variable_to_hmet={variable: hmet_variable},
@@ -470,7 +460,7 @@ class ConvertToGSSHA(DataConverterBase):
 
             # get a file path (YYYYMMDDHH_TYPE.asc format)
             timestamp: str = pd.to_datetime(time).strftime('%Y%m%d%H')
-            file_path: Path = cls._get_file_path(
+            file_path: Path = _get_file_path(
                 file_dir=file_dir,
                 file_name=f'{timestamp}_{file_name}',
                 file_suffix=file_suffix,
@@ -478,7 +468,7 @@ class ConvertToGSSHA(DataConverterBase):
 
             # write the ASCII file
             file_paths.append(file_path)
-            cls._write_ascii_file(
+            _write_ascii_file(
                 text_content=ascii_text,
                 file_path=file_path,
             )
@@ -487,9 +477,8 @@ class ConvertToGSSHA(DataConverterBase):
         )
         return file_paths
 
-    @classmethod
+    @staticmethod
     def make_gssha_hmet_wes(
-        cls,
         xarray_dataset: xr.Dataset,
         variable_to_hmet: Dict[str, str] = None,
         start_time: Optional[TimeInput] = None,
@@ -534,7 +523,7 @@ class ConvertToGSSHA(DataConverterBase):
             )
 
         # prepare the dataset
-        xarray_dataset = cls._prepare_dataset(
+        xarray_dataset = _prepare_dataset(
             xarray_dataset=xarray_dataset,
             variables=list(variable_to_hmet.keys()),
             variable_to_hmet=variable_to_hmet,
@@ -546,7 +535,7 @@ class ConvertToGSSHA(DataConverterBase):
         if not file_name:
             file_name: str = 'hmet_wes'
 
-        file_path: Path = cls._get_file_path(
+        file_path: Path = _get_file_path(
             file_dir=file_dir,
             file_name=file_name,
             file_suffix=file_suffix,
@@ -596,7 +585,7 @@ class ConvertToGSSHA(DataConverterBase):
             data_str += '\n'
 
         # write the ASCII file
-        cls._write_ascii_file(
+        _write_ascii_file(
             text_content=data_str,
             file_path=file_path,
             hot_start=hot_start,
@@ -604,14 +593,3 @@ class ConvertToGSSHA(DataConverterBase):
 
         logging.info(f'HMET WES ASCII file saved @ {file_path}.')
         return file_path
-
-    @classmethod
-    def get_conversion_functions(
-        cls,
-    ) -> Dict[str, DataConverterBase.ConversionFunctionType]:
-        """Returns a dictionary of conversion functions."""
-        return {
-            cls.make_gssha_precipitation_input.__name__: cls.make_gssha_precipitation_input,
-            cls.make_gssha_grass_ascii.__name__: cls.make_gssha_grass_ascii,
-            cls.make_gssha_hmet_wes.__name__: cls.make_gssha_hmet_wes,
-        }

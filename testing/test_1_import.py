@@ -69,21 +69,28 @@ def test_dataset_variables():
 
 def test_data_conversion_functions() -> None:
 
-    # check conversion functions class and default functions
-    assert 'DataConversionFunctions' in dir(xarray_data_accessor)
-    from xarray_data_accessor import DataConversionFunctions
+    # check the table conversion function
+    assert 'ConvertToTable' in dir(xarray_data_accessor)
+    from xarray_data_accessor import ConvertToTable
 
-    assert isinstance(DataConversionFunctions, type)
-    assert 'points_to_tables' in dir(DataConversionFunctions)
+    assert isinstance(ConvertToTable, type)
+    table_functions = [
+        'points_to_tables',
+    ]
+    for func in table_functions:
+        assert func in dir(ConvertToTable)
+        assert callable(getattr(ConvertToTable, func))
 
-    # check the factory
-    assert 'DataConversionFactory' in dir(xarray_data_accessor)
-    from xarray_data_accessor import DataConversionFactory
+    # check the gssha conversion function
+    assert 'ConvertToGSSHA' in dir(xarray_data_accessor)
+    from xarray_data_accessor import ConvertToGSSHA
 
-    assert DataConversionFunctions.get_factory()
-    factory = DataConversionFunctions.get_factory()
-
-    assert isinstance(factory.get_functions(), dict)
-    for name, func in factory.get_functions().items():
-        assert isinstance(name, str)
-        assert callable(func)
+    assert isinstance(ConvertToGSSHA, type)
+    gssha_functions = [
+        'make_gssha_precipitation_input',
+        'make_gssha_grass_ascii',
+        'make_gssha_hmet_wes',
+    ]
+    for func in gssha_functions:
+        assert func in dir(ConvertToGSSHA)
+        assert callable(getattr(ConvertToGSSHA, func))

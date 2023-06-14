@@ -17,10 +17,9 @@ from xarray_data_accessor.core_functions import (
 from xarray_data_accessor.data_accessors.factory import (
     DataAccessorFactory,
 )
-from xarray_data_accessor.data_converters.factory import (
-    DataConversionFactory,
-    DataConversionFunctions,
-)
 import xarray_data_accessor.shared_types as shared_types
-
+from xarray_data_accessor.data_converters import (
+    ConvertToTable,
+    ConvertToGSSHA,
+)
 from xarray_data_accessor.multi_threading import get_multithread
