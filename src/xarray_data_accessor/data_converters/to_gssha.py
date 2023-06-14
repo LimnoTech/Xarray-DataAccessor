@@ -1,6 +1,5 @@
 import warnings
 import logging
-import pyproj
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -28,8 +27,14 @@ from typing import (
     Dict,
     Union,
     Optional,
+    Literal,
     TypedDict,
 )
+
+OPEN_MODES: Dict[bool, Literal['a', 'w']] = {
+    True: 'a',
+    False: 'w',
+}
 
 
 class EventIntervals(TypedDict):
@@ -38,11 +43,11 @@ class EventIntervals(TypedDict):
     end: datetime
 
 
-@ DataConversionFactory.register
+@DataConversionFactory.register
 class ConvertToGSSHA(DataConverterBase):
     """Converts xarray datasets to GSSHA input files."""
 
-    @ staticmethod
+    @staticmethod
     def _get_file_path(
         file_dir: Optional[Union[str, Path]] = None,
         file_name: Optional[str] = None,
@@ -63,7 +68,7 @@ class ConvertToGSSHA(DataConverterBase):
         # make sure the file name is valid
         if not file_name:
             file_name = 'gssha_input'
-            logging.warn(
+            logging.warning(
                 f'No file name was provided! Using default file name {file_name}.',
             )
         if not isinstance(file_name, str):
@@ -86,16 +91,17 @@ class ConvertToGSSHA(DataConverterBase):
         # return the file path
         return Path(file_dir / f'{file_name}{file_suffix}')
 
-    @ staticmethod
+    @staticmethod
     def _write_ascii_file(
         text_content: str,
         file_path: Path,
+        hot_start: Optional[bool] = False,
     ) -> None:
         """Writes the text content to the file path."""
-        # write the text content to the file path
+
         with open(
             file_path,
-            'w',
+            OPEN_MODES[hot_start],
             encoding='ascii',
         ) as file:
             file.write(text_content)
@@ -117,7 +123,7 @@ class ConvertToGSSHA(DataConverterBase):
                     f'Something went wrong - File {file_path} is not a valid ASCII file.',
                 )
 
-    @ staticmethod
+    @staticmethod
     def _write_precip_coords(
         easting: np.ndarray,
         northing: np.ndarray,
@@ -254,6 +260,7 @@ class ConvertToGSSHA(DataConverterBase):
         file_dir: Optional[Union[str, Path]] = None,
         file_name: Optional[str] = None,
         file_suffix: Optional[str] = None,
+        hot_start: Optional[bool] = False,
     ) -> Path:
         """Creates a GSSHA precipitation input file from an xarray dataset.
 
@@ -269,6 +276,8 @@ class ConvertToGSSHA(DataConverterBase):
             file_dir: The directory to save the file to.
             file_name: The name of the file to save.
             file_suffix: The file suffix to use.
+            hot_start: If true data is appended to the end of the file.
+                Otherwise, the file is overwritten.
 
         Returns:
             The path of the output precipitation ASCII input file.
@@ -356,11 +365,12 @@ class ConvertToGSSHA(DataConverterBase):
         cls._write_ascii_file(
             text_content=ascii_text,
             file_path=file_path,
+            hot_start=hot_start,
         )
         logging.info(f'Precipitation ASCII file saved @ {file_path}.')
         return file_path
 
-    @ classmethod
+    @classmethod
     def make_gssha_grass_ascii(
         cls,
         xarray_dataset: xr.Dataset,
@@ -477,7 +487,7 @@ class ConvertToGSSHA(DataConverterBase):
         )
         return file_paths
 
-    @ classmethod
+    @classmethod
     def make_gssha_hmet_wes(
         cls,
         xarray_dataset: xr.Dataset,
@@ -487,6 +497,7 @@ class ConvertToGSSHA(DataConverterBase):
         file_dir: Optional[Union[str, Path]] = None,
         file_name: Optional[str] = None,
         file_suffix: Optional[str] = None,
+        hot_start: Optional[bool] = False,
         how: Optional[HMETAggregationFunctions] = None,
         xy_coords: Optional[Tuple[str, str]] = None,
     ) -> Path:
@@ -505,6 +516,8 @@ class ConvertToGSSHA(DataConverterBase):
                 NOTE: The file name is automatically generated.
             file_name: The name of the file to save.
             file_suffix: The file suffix to use.
+            hot_start: If true data is appended to the end of the file.
+                Otherwise, the file is overwritten.
             how: The method to use to aggregate the data at each time step.
                 Options include: 'mean', 'median', 'min', 'max', 'sum'.
             xy_coords: The x and y coordinate names to use for aggregation.
@@ -586,12 +599,13 @@ class ConvertToGSSHA(DataConverterBase):
         cls._write_ascii_file(
             text_content=data_str,
             file_path=file_path,
+            hot_start=hot_start,
         )
 
         logging.info(f'HMET WES ASCII file saved @ {file_path}.')
         return file_path
 
-    @ classmethod
+    @classmethod
     def get_conversion_functions(
         cls,
     ) -> Dict[str, DataConverterBase.ConversionFunctionType]:

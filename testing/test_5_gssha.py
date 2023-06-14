@@ -24,6 +24,12 @@ def test_dataset(test_dir) -> xr.Dataset:
     return ds
 
 
+def count_lines(filename: Path):
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+    return len(lines)
+
+
 def test_factory() -> None:
     """Make sure the function was correctly registered."""
     assert 'ConvertToGSSHA' in xda.DataConversionFactory.get_converter_classes().keys()
@@ -43,11 +49,24 @@ def test_precipitation_input(test_dataset) -> None:
     out_path = xda.DataConversionFunctions.make_gssha_precipitation_input(
         test_dataset,
         precipitation_variable='2m_temperature',
+        precipitation_type='GAGE',
         output_epsg=26915,
     )
 
     assert out_path.exists()
     assert out_path.suffix == '.gag'
+    l1 = count_lines(out_path)
+
+    # test the hot start
+    out_path = xda.DataConversionFunctions.make_gssha_precipitation_input(
+        test_dataset,
+        precipitation_variable='2m_temperature',
+        precipitation_type='GAGE',
+        output_epsg=26915,
+        hot_start=True,
+    )
+    l2 = count_lines(out_path)
+    assert l1 < l2
     out_path.unlink()
 
 
