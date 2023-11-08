@@ -37,4 +37,8 @@ dependencies:
   - conda-build # to self install library
   - mamba
   - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
+  # PIP install requirements only if it is not possible with conda
+  # https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#using-pip-in-an-environment
   - pip
+  - pip:
+    - fcpgtools

@@ -1,7 +1,6 @@
 name: data_accessor_full
 channels:
   - conda-forge
-  - pyviz
   - nodefaults
 
 # full env includes all dependencies for viz
@@ -16,7 +15,7 @@ dependencies:
   - geopandas
 
   # For API access and data formats
-  - cdsapi
+  - cdsapi  # Copernicus Climate Data Store (CDS) API
   - fsspec
   - s3fs
   - cfgrib
@@ -26,14 +25,13 @@ dependencies:
   - h5netcdf
   - openpyxl
   - metpy
+  - pysheds
 
   # Interactivity & Visualization (optional, but required for viz)
   - jupyterlab
   - ipympl
   - nodejs
   - cartopy
-
-  # Get holoviews libs from pyviz
   - holoviews >=1.12.0
   - hvplot
   - geoviews >=1.6.2 # pinned to avoid this issue: https://github.com/holoviz/geoviews/issues/334
@@ -48,4 +46,8 @@ dependencies:
   - conda-build # to self install library
   - mamba
   - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
+  # PIP install requirements only if it is not possible with conda
+  # https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#using-pip-in-an-environment
   - pip
+  - pip:
+    # - fcpgtools # Holding until fcpgtools supports Py 3.11
