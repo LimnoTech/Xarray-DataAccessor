@@ -1,0 +1,58 @@
+name: icechunk
+channels:
+  - conda-forge
+  # - nodefaults # Speeds solving env, by limiting the number of options
+
+dependencies:
+  - python =3.12
+
+  # Data Engine
+  - icechunk # installs zarr3
+
+  # Data processing
+  - geopandas # installs shapely, pyarrow, pyogrio, libgdal, networkx
+  - xarray
+  - rioxarray
+  - dask
+
+  # Remote Access
+  - fsspec
+  - s3fs  # Access to Amazon S3 filesystem
+  - kerchunk
+  - virtualizarr
+  - cdsapi # Access to Copernicus Data System for ERA5
+
+
+  # # HyRiver packages for data fetching
+  # - pygeoogc # Retrieve Data from RESTful, WMS, and WFS Services
+  # - async-retriever # Asynchronous requests with persistent caching
+
+  # # Visualization (optional)
+  # - hvplot  # hvPlot installs most HoloViz libs, https://holoviz.org
+  # - geoviews
+  # - contextily # for static plotting
+
+  # # Interactivity via Jupyter Notebooks
+  # - jupyterlab
+  # - nodejs  # required for many extensions
+  # - ipympl  # jupyter-matplotlib, https://github.com/matplotlib/ipympl
+  # - ipywidgets  # Interactive HTML widgets for Jupyter
+  # - ipywidgets_bokeh
+  # - jupyter_bokeh # Renders Holviz / Bokeh objects in Jupyter
+  # - pyviz_comms # bidirectional communication between Python & JavaScript for Jupyter
+#   - jupyter_fsspec
+
+  # Dev tools: Language Server Protocol (LSP) (Optional)
+  - python-lsp-server # LSP extension for Python (pylsp), including:
+  - pylsp-mypy  # MyPy type checking for Python >=3.7.
+  # - jupyterlab-lsp # Provides both server extension and lab extension
+
+  # Environment and package management
+  - conda
+  - conda-build
+  - conda-libmamba-solver  # Faster env solver, https://conda.github.io/conda-libmamba-solver/
+  - pip
+  - git  # for pip installing directly from GitHub
+  # PIP install requirements only if it is not  possible with conda
+  - pip:
+    # - 
