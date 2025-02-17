@@ -18,6 +18,8 @@ dependencies:
   # Remote Access
   - fsspec
   - s3fs  # Access to Amazon S3 filesystem
+  - kerchunk
+  - virtualizarr
   - cdsapi # Access to Copernicus Data System for ERA5
 
 
@@ -38,6 +40,7 @@ dependencies:
   # - ipywidgets_bokeh
   # - jupyter_bokeh # Renders Holviz / Bokeh objects in Jupyter
   # - pyviz_comms # bidirectional communication between Python & JavaScript for Jupyter
+#   - jupyter_fsspec
 
   # Dev tools: Language Server Protocol (LSP) (Optional)
   - python-lsp-server # LSP extension for Python (pylsp), including:
